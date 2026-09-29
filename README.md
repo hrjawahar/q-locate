@@ -1,6 +1,6 @@
 # Q-Locate — Quick location guide
 
-React PWA on Cloudflare Pages + Pages Functions, D1 database, R2 photos.
+React PWA on a Cloudflare Worker (static assets + API), D1 database, R2 photos.
 
 ## First-time setup (Phases 1–3)
 
@@ -37,10 +37,10 @@ npm run db:migrate:remote && npm run db:seed:remote    # the real database
 
 With `npm run cf` running, open:
 
-- `http://localhost:8788/` — coming-soon page
-- `http://localhost:8788/api/index.json` — published places (2 test places)
-- `http://localhost:8788/api/places/palani-murugan-tn` — one place in full
-- `http://localhost:8788/api/search?q=kodai` — search fallback
+- `http://localhost:8787/` — coming-soon page
+- `http://localhost:8787/api/index.json` — published places (2 test places)
+- `http://localhost:8787/api/places/palani-murugan-tn` — one place in full
+- `http://localhost:8787/api/search?q=kodai` — search fallback
 
 Publish another test place:
 
@@ -53,6 +53,5 @@ npx wrangler d1 execute q-locate-db --local --command "UPDATE places SET status=
 ## Where things are
 
 - `src/` — screens (React)
-- `functions/api/` — data API: `index.json`, `places/:slug`, `search`
-- `functions/img/` — photos from R2 (`/img/<key>`)
+- `worker/` — data API (`/api/index.json`, `/api/places/:slug`, `/api/search`) and photos (`/img/<key>`)
 - `migrations/` — database tables · `seed/` — starter data

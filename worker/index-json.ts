@@ -1,7 +1,7 @@
-import { Env, json, splitList, photoUrls } from '../_lib/util'
+import { Env, json, splitList, photoUrls } from './util'
 
 // GET /api/index.json — compact list of every published place, for on-device search.
-export const onRequestGet: PagesFunction<Env> = async ({ env, request, waitUntil }) => {
+export const indexJson = async (request: Request, env: Env, ctx: ExecutionContext) => {
   const version = (await env.DB.prepare("SELECT value FROM meta WHERE key = 'index_version'").first<string>('value')) ?? '0'
   const cacheKey = new Request(new URL(`/api/index.json?v=${version}`, request.url).toString())
   const cache = caches.default
@@ -42,6 +42,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, waitUntil
   const res = json({ version, count: places.length, places }, {
     headers: { 'cache-control': 'public, max-age=300' },
   })
-  waitUntil(cache.put(cacheKey, res.clone()))
+  ctx.waitUntil(cache.put(cacheKey, res.clone()))
   return res
 }

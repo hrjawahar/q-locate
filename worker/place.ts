@@ -1,8 +1,7 @@
-import { Env, json, parseJson, splitList, photoUrls } from '../../_lib/util'
+import { Env, json, parseJson, splitList, photoUrls } from './util'
 
 // GET /api/places/:slug — one published place with all its details.
-export const onRequestGet: PagesFunction<Env, 'slug'> = async ({ env, params }) => {
-  const slug = String(params.slug)
+export const place = async (env: Env, slug: string) => {
   const p = await env.DB.prepare("SELECT * FROM places WHERE slug = ? AND status = 'published'")
     .bind(slug).first<Record<string, unknown>>()
   if (!p) return json({ error: 'not_found' }, { status: 404 })

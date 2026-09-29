@@ -1,7 +1,7 @@
-import { Env, json } from '../_lib/util'
+import { Env, json } from './util'
 
 // GET /api/search?q=kodai&kind=vacation — server fallback when the on-device index isn't loaded.
-export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
+export const search = async (request: Request, env: Env) => {
   const url = new URL(request.url)
   const q = (url.searchParams.get('q') ?? '').trim().slice(0, 60)
   const kind = url.searchParams.get('kind')

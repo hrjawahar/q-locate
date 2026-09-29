@@ -1,9 +1,7 @@
-import { Env } from '../_lib/util'
+import { Env } from './util'
 
 // GET /img/<key> — serves photos from the R2 bucket, cached for a year (keys never change).
-export const onRequestGet: PagesFunction<Env, 'path'> = async ({ env, params }) => {
-  const parts = Array.isArray(params.path) ? params.path : [params.path]
-  const key = parts.join('/')
+export const img = async (env: Env, key: string) => {
   if (!key || key.includes('..')) return new Response('Not found', { status: 404 })
 
   const obj = await env.PHOTOS.get(key)

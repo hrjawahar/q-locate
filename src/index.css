@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forest: #2E5B3C;
+  --color-saffron: #D27A14;
+  --color-sand: #F5EFE2;
+  --color-ink: #1E2A22;
+  --color-muted: #5B6B5E;
+  --color-maroon: #3F1016;
+  --font-display: "Sora", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, sans-serif;
+  --font-serif: "Noto Serif", Georgia, serif;
+}
+
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--color-sand); color: var(--color-ink); font-family: var(--font-body); }

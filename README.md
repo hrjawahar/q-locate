@@ -55,3 +55,10 @@ npx wrangler d1 execute q-locate-db --local --command "UPDATE places SET status=
 - `src/` — screens (React)
 - `worker/` — data API (`/api/index.json`, `/api/places/:slug`, `/api/search`) and photos (`/img/<key>`)
 - `migrations/` — database tables · `seed/` — starter data
+
+## Admin app (q-locate-admin)
+
+A second Worker from the same repo, locked by Cloudflare Access. Config: `wrangler.admin.toml`.
+Deploy command in Cloudflare: `npx wrangler deploy --config wrangler.admin.toml`.
+After enabling Access, set `TEAM_DOMAIN` and `POLICY_AUD` in `wrangler.admin.toml`.
+Local test: `npx wrangler dev -c wrangler.admin.toml --var DEV_ADMIN_EMAIL:you@example.com` (only works on localhost).

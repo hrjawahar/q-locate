@@ -1,0 +1,13 @@
+name = "q-locate"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "q-locate-db"
+database_id = "REPLACE_WITH_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "q-locate-photos"

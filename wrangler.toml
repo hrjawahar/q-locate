@@ -5,7 +5,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "q-locate-db"
-database_id = "REPLACE_WITH_DATABASE_ID"
+database_id = "b15bbfdb-cad1-470d-9710-4564338e26ae"
 migrations_dir = "migrations"
 
 [[r2_buckets]]

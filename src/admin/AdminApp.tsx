@@ -10,7 +10,7 @@ import Activity from './Activity'
 export default function AdminApp() {
   const [me, setMe] = useState<Me | null>(null)
   const [lookups, setLookups] = useState<Lookups | null>(null)
-  const [error, setError] = useState<{ msg: string; email?: string } | null>(null)
+  const [error, setError] = useState<{ msg: string; email?: string; detail?: string } | null>(null)
 
   useEffect(() => {
     api<Me>('/me')
@@ -20,6 +20,7 @@ export default function AdminApp() {
           : e.data.error === 'not_signed_in' ? 'You are not signed in. Open this page through the Q-Locate admin address.'
           : e.message,
         email: e.data.email as string | undefined,
+        detail: e.data.detail as string | undefined,
       }))
   }, [])
 
@@ -29,6 +30,7 @@ export default function AdminApp() {
       <h1 className="font-display text-xl font-bold m-0">Q-Locate Admin</h1>
       <p className="m-0 max-w-sm">{error.msg}</p>
       {error.email && <p className="m-0 text-sm text-muted">Signed in as {error.email}</p>}
+      {error.detail && <p className="m-0 text-xs text-muted">Reason: {error.detail}</p>}
     </main>
   )
   if (!me || !lookups) return <p className="p-6">Loading…</p>

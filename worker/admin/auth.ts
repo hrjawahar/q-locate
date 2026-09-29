@@ -12,10 +12,16 @@ export interface Admin { email: string; role: Role; scope: 'all' | 'vacation' | 
 
 const jwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
 
+const cookieToken = (request: Request) =>
+  (request.headers.get('cookie') ?? '').split(/;\s*/).find((c) => c.startsWith('CF_Authorization='))?.slice(17) ?? null
+
+export let lastAuthProblem = ''
+
 async function emailFromAccess(request: Request, env: AdminEnv): Promise<string | null> {
   const host = new URL(request.url).hostname
   if ((host === 'localhost' || host === '127.0.0.1') && env.DEV_ADMIN_EMAIL) return env.DEV_ADMIN_EMAIL
-  const token = request.headers.get('cf-access-jwt-assertion')
+  const token = request.headers.get('cf-access-jwt-assertion') || cookieToken(request)
+  lastAuthProblem = !token ? 'no_access_token' : !env.TEAM_DOMAIN ? 'team_domain_not_set' : ''
   if (!token || !env.TEAM_DOMAIN) return null
   const team = env.TEAM_DOMAIN.replace(/^https?:\/\//, '').replace(/\/$/, '')
   let set = jwks.get(team)
@@ -25,8 +31,10 @@ async function emailFromAccess(request: Request, env: AdminEnv): Promise<string 
   }
   try {
     const { payload } = await jwtVerify(token, set, { issuer: `https://${team}`, ...(env.POLICY_AUD ? { audience: env.POLICY_AUD } : {}) })
-    return typeof payload.email === 'string' ? payload.email.toLowerCase() : null
-  } catch {
+    if (typeof payload.email !== 'string') { lastAuthProblem = 'token_has_no_email'; return null }
+    return payload.email.toLowerCase()
+  } catch (e) {
+    lastAuthProblem = `token_check_failed: ${(e as Error).message}`.slice(0, 200)
     return null
   }
 }

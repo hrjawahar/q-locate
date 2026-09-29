@@ -1,6 +1,6 @@
 import { json } from '../util'
 import { img } from '../img'
-import { AdminEnv, getAdmin } from './auth'
+import { AdminEnv, getAdmin, lastAuthProblem } from './auth'
 import * as api from './api'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
@@ -16,7 +16,7 @@ export default {
 
     const { admin, email } = await getAdmin(request, env)
     if (pathname === '/api/admin/me') {
-      return admin ? json(admin) : json({ error: email ? 'not_admin' : 'not_signed_in', email }, { status: 403 })
+      return admin ? json(admin) : json({ error: email ? 'not_admin' : 'not_signed_in', email, detail: email ? undefined : lastAuthProblem }, { status: 403 })
     }
     if (!admin) return json({ error: 'forbidden' }, { status: 403 })
 

@@ -16,7 +16,7 @@ async function emailFromAccess(request: Request, env: AdminEnv): Promise<string 
   const host = new URL(request.url).hostname
   if ((host === 'localhost' || host === '127.0.0.1') && env.DEV_ADMIN_EMAIL) return env.DEV_ADMIN_EMAIL
   const token = request.headers.get('cf-access-jwt-assertion')
-  if (!token || !env.TEAM_DOMAIN || !env.POLICY_AUD) return null
+  if (!token || !env.TEAM_DOMAIN) return null
   const team = env.TEAM_DOMAIN.replace(/^https?:\/\//, '').replace(/\/$/, '')
   let set = jwks.get(team)
   if (!set) {
@@ -24,7 +24,7 @@ async function emailFromAccess(request: Request, env: AdminEnv): Promise<string 
     jwks.set(team, set)
   }
   try {
-    const { payload } = await jwtVerify(token, set, { issuer: `https://${team}`, audience: env.POLICY_AUD })
+    const { payload } = await jwtVerify(token, set, { issuer: `https://${team}`, ...(env.POLICY_AUD ? { audience: env.POLICY_AUD } : {}) })
     return typeof payload.email === 'string' ? payload.email.toLowerCase() : null
   } catch {
     return null

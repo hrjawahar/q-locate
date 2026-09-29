@@ -9,7 +9,7 @@ not_found_handling = "single-page-application"
 run_worker_first = ["/", "/api/*", "/img/*"]
 
 [vars]
-TEAM_DOMAIN = ""
+TEAM_DOMAIN = "crimson-bread-7516.cloudflareaccess.com"
 POLICY_AUD = ""
 
 [[d1_databases]]

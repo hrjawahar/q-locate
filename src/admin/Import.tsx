@@ -4,7 +4,7 @@ import { api, Me } from './api'
 
 interface Preset { id: string; label: string; kind: 'vacation' | 'spiritual'; mode: 'type' | 'names'; scope?: 'india' | 'intl'; category: string; circuit?: string; count?: number }
 interface Item { id: string; label: string; description: string; exists?: number | null; queued?: boolean; position?: number; query?: string; alternatives?: { id: string; label: string; description: string }[] }
-interface Status { counts: Record<string, number>; recent: { id: number; wikidata_id: string; label: string; status: string; error: string | null; place_id: number | null }[]; ai: boolean }
+interface Status { counts: Record<string, number>; batch?: Record<string, number>; recent: { id: number; wikidata_id: string; label: string; status: string; error: string | null; place_id: number | null }[]; ai: boolean }
 
 const inp = 'h-11 w-full rounded-lg border border-stone-300 bg-white px-3'
 const btn = 'h-11 px-4 rounded-lg font-semibold disabled:opacity-50'
@@ -87,23 +87,25 @@ export default function Import({ me }: { me: Me }) {
   }
 
   const c = st?.counts ?? {}
-  const total = (c.pending ?? 0) + (c.processing ?? 0) + (c.done ?? 0) + (c.skipped ?? 0) + (c.error ?? 0)
-  const finished = (c.done ?? 0) + (c.skipped ?? 0) + (c.error ?? 0)
+  const bt = st?.batch ?? {}
+  const total = (bt.pending ?? 0) + (bt.processing ?? 0) + (bt.done ?? 0) + (bt.skipped ?? 0) + (bt.error ?? 0)
+  const finished = (bt.done ?? 0) + (bt.skipped ?? 0) + (bt.error ?? 0)
+  const everything = (c.pending ?? 0) + (c.processing ?? 0) + (c.done ?? 0) + (c.skipped ?? 0) + (c.error ?? 0)
 
   return (
     <section className="flex flex-col gap-5">
       <h1 className="m-0 font-display text-2xl font-bold">Import from open sources</h1>
       <p className="m-0 text-sm text-muted">Places come from Wikidata, with photos from Wikimedia Commons and nearby stations, stays, eateries and sights from OpenStreetMap. {st?.ai ? 'AI drafts the summary, highlights, how to reach and nearby notes from those sources only.' : 'AI drafting is off (no ANTHROPIC_API_KEY set).'} Everything arrives as a <b>draft marked “needs review”</b>; nothing is published until you check it.</p>
 
-      {st && total > 0 && (
+      {st && everything > 0 && (
         <div className="p-4 rounded-xl border border-stone-200 flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <b>Import queue</b>
+            <b>{total && (c.pending || c.processing) ? `Current batch: ${finished} of ${total} finished` : 'Import queue: all finished'}</b>
             <span>Waiting {c.pending ?? 0}</span><span>Working {c.processing ?? 0}</span><span className="text-green-800">Done {c.done ?? 0}</span>
             <span>Skipped {c.skipped ?? 0}</span><span className="text-red-700">Errors {c.error ?? 0}</span>
             <Link to="/admin?status=imported" className="ml-auto font-semibold">Review imported drafts →</Link>
           </div>
-          <div className="h-2 rounded-full bg-stone-200 overflow-hidden"><div className="h-full bg-forest" style={{ width: `${total ? (finished / total) * 100 : 0}%` }} /></div>
+          <div className="h-2 rounded-full bg-stone-200 overflow-hidden"><div className="h-full bg-forest" style={{ width: `${c.pending || c.processing ? (total ? (finished / total) * 100 : 0) : 100}%` }} /></div>
           <div className="flex flex-wrap gap-2">
             {(c.pending ?? 0) > 0 && (running
               ? <button className={`${btn} border border-stone-300 bg-white`} onClick={() => { runRef.current = false }}>Pause fast import</button>

@@ -14,8 +14,13 @@ export const INDIA_STATES = ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'A
 const sparqlStr = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 const qid = (s: string) => { if (!/^Q\d+$/.test(s)) throw new Error(`Bad Wikidata id ${s}`); return s }
 
-async function getJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, { ...init, headers: { 'user-agent': UA, accept: 'application/json', ...(init.headers || {}) } })
+async function getJson<T>(url: string, init: RequestInit = {}, timeoutMs = 20000): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs), headers: { 'user-agent': UA, accept: 'application/json', ...(init.headers || {}) } })
+  } catch (e) {
+    throw new Error(`${new URL(url).hostname} ${(e as Error).name === 'TimeoutError' ? `gave no answer in ${timeoutMs / 1000}s` : 'unreachable'}`)
+  }
   if (!res.ok) throw new Error(`${new URL(url).hostname} answered ${res.status}`)
   return res.json() as Promise<T>
 }
@@ -220,7 +225,7 @@ export const km = (a: [number, number], b: [number, number]) => {
 export interface OsmEl { tags: Record<string, string>; lat: number; lon: number }
 export async function overpass(lat: number, lng: number): Promise<OsmEl[]> {
   const a = (r: number) => `(around:${r},${lat},${lng})`
-  const q = `[out:json][timeout:40];
+  const q = `[out:json][timeout:15];
 nwr${a(20000)}[amenity=bus_station][name]; out center tags 8;
 nwr${a(3000)}[tourism~"^(hostel|guest_house|hotel|motel|apartment)$"][name]; out center tags 25;
 nwr${a(1500)}[amenity~"^(restaurant|cafe|fast_food)$"][name]; out center tags 25;
@@ -229,12 +234,15 @@ nwr${a(12000)}[tourism~"^(attraction|viewpoint)$"][name]; out center tags 20;
 node${a(12000)}[natural~"^(waterfall|peak|beach)$"][name]; out tags 15;`
   type Resp = { elements?: { lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[]; remark?: string }
   // Public Overpass servers often refuse cloud traffic or time out, so try mirrors in turn.
-  const servers = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter']
+  const servers = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']
+  const deadline = Date.now() + 40000
   const problems: string[] = []
   let d: Resp | null = null
   for (const server of servers) {
+    const left = deadline - Date.now()
+    if (left < 5000) break
     try {
-      const r = await getJson<Resp>(server, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ data: q }).toString() })
+      const r = await getJson<Resp>(server, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ data: q }).toString() }, Math.min(18000, left))
       if (r.remark && /timed out|runtime error/i.test(r.remark) && !(r.elements ?? []).length) { problems.push(`${new URL(server).hostname}: ${r.remark.slice(0, 60)}`); continue }
       d = r; break
     } catch (e) { problems.push((e as Error).message) }

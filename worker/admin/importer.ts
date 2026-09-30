@@ -123,13 +123,17 @@ export async function enqueue(body: Record<string, unknown>, env: AdminEnv, a: A
 }
 
 export async function status(env: AdminEnv) {
-  const [counts, recent] = await env.DB.batch([
+  const [counts, recent, batch] = await env.DB.batch([
     env.DB.prepare('SELECT status, count(*) AS n FROM import_queue GROUP BY status'),
     env.DB.prepare("SELECT id, wikidata_id, label, status, error, place_id, finished_at FROM import_queue WHERE status IN ('error','done','skipped') ORDER BY id DESC LIMIT 30"),
+    // The current batch: everything queued since the oldest item that is still waiting or working.
+    env.DB.prepare(`SELECT status, count(*) AS n FROM import_queue WHERE id >= COALESCE((SELECT min(id) FROM import_queue WHERE status IN ('pending','processing')), (SELECT max(id) + 1 FROM import_queue)) GROUP BY status`),
   ])
+  const b: Record<string, number> = { pending: 0, processing: 0, done: 0, skipped: 0, error: 0 }
+  for (const r of batch.results as { status: string; n: number }[]) b[r.status] = r.n
   const c: Record<string, number> = { pending: 0, processing: 0, done: 0, skipped: 0, error: 0 }
   for (const r of counts.results as { status: string; n: number }[]) c[r.status] = r.n
-  return json({ counts: c, recent: recent.results, ai: !!(env as AdminEnv & { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY })
+  return json({ counts: c, batch: b, recent: recent.results, ai: !!(env as AdminEnv & { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY })
 }
 
 export async function retryErrors(env: AdminEnv) {
@@ -150,7 +154,7 @@ export async function processNext(env: Env, max: number) {
   // Items stuck in "processing" for 10+ minutes are retried (up to 3 attempts).
   await env.DB.prepare(`UPDATE import_queue SET status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
     error = CASE WHEN attempts >= 3 THEN 'Timed out 3 times' ELSE error END
-    WHERE status = 'processing' AND started_at < datetime('now','-10 minutes')`).run()
+    WHERE status = 'processing' AND started_at < datetime('now','-3 minutes')`).run()
   let done = 0
   for (let n = 0; n < max; n++) {
     const row = await env.DB.prepare(`UPDATE import_queue SET status = 'processing', attempts = attempts + 1, started_at = datetime('now')

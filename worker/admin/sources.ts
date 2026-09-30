@@ -69,6 +69,7 @@ export interface WdPlace {
   lat: number | null; lng: number | null; country: string | null
   state: string | null; district: string | null; city: string | null
   image: string | null; website: string | null; wikiTitle: string | null; deity: string | null
+  facts: Record<string, string>
 }
 
 export function parsePoint(v?: string): [number, number] | null {
@@ -93,7 +94,7 @@ export function placeAdmin(chain: string[], country: string | null) {
 
 export async function wdPlace(id: string): Promise<WdPlace> {
   const rows = await sparql(`SELECT ?item (SAMPLE(?l) AS ?label) (SAMPLE(?d) AS ?desc) (SAMPLE(?c) AS ?coord) (SAMPLE(?cl) AS ?country)
- (SAMPLE(?img) AS ?image) (SAMPLE(?web) AS ?website) (SAMPLE(?t) AS ?wiki) (SAMPLE(?dl) AS ?deity)
+ (SAMPLE(?img) AS ?image) (SAMPLE(?web) AS ?website) (SAMPLE(?t) AS ?wiki) (SAMPLE(?dl) AS ?deity) (SAMPLE(?elev) AS ?elevation) (SAMPLE(?inc) AS ?inception) (SAMPLE(?stl) AS ?style) (SAMPLE(?hl) AS ?heritage) (SAMPLE(?tl) AS ?instance)
  (SAMPLE(?a1l) AS ?adm1) (SAMPLE(?a2l) AS ?adm2) (SAMPLE(?a3l) AS ?adm3) (SAMPLE(?a4l) AS ?adm4)
  (GROUP_CONCAT(DISTINCT ?al; separator="|") AS ?aliases) (SAMPLE(?ta) AS ?taLabel) (SAMPLE(?hi) AS ?hiLabel) WHERE {
  VALUES ?item { wd:${qid(id)} }
@@ -105,6 +106,11 @@ export async function wdPlace(id: string): Promise<WdPlace> {
  OPTIONAL { ?item wdt:P856 ?web }
  OPTIONAL { ?art schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> ; schema:name ?t }
  OPTIONAL { ?item wdt:P825 ?de . ?de rdfs:label ?dl FILTER(lang(?dl)="en") }
+ OPTIONAL { ?item wdt:P2044 ?elev }
+ OPTIONAL { ?item wdt:P571 ?inc }
+ OPTIONAL { ?item wdt:P149 ?st . ?st rdfs:label ?stl FILTER(lang(?stl)="en") }
+ OPTIONAL { ?item wdt:P1435 ?h . ?h rdfs:label ?hl FILTER(lang(?hl)="en") }
+ OPTIONAL { ?item wdt:P31 ?ty . ?ty rdfs:label ?tl FILTER(lang(?tl)="en") }
  OPTIONAL { ?item wdt:P131 ?a1 . ?a1 rdfs:label ?a1l FILTER(lang(?a1l)="en")
   OPTIONAL { ?a1 wdt:P131 ?a2 . ?a2 rdfs:label ?a2l FILTER(lang(?a2l)="en")
    OPTIONAL { ?a2 wdt:P131 ?a3 . ?a3 rdfs:label ?a3l FILTER(lang(?a3l)="en")
@@ -125,10 +131,23 @@ export async function wdPlace(id: string): Promise<WdPlace> {
     id, name, description: v('desc') ?? '', altNames: [...new Set(alt)].slice(0, 8),
     lat: pt?.[0] ?? null, lng: pt?.[1] ?? null, country, ...adm,
     image: v('image'), website: v('website'), wikiTitle: v('wiki'), deity: v('deity'),
+    facts: Object.fromEntries(Object.entries({
+      type: v('instance'), elevation_m: v('elevation') ? String(Math.round(Number(v('elevation')))) : null,
+      established: v('inception')?.slice(0, 4).replace(/^-?0+/, '') || null, architecture: v('style'), heritage_status: v('heritage'),
+    }).filter(([, x]) => x)) as Record<string, string>,
   }
 }
 
+/** Plain text of the English Wikipedia article (first ~6000 characters), used only as source material for AI drafts. */
 export async function wikiExtract(title: string): Promise<{ text: string; url: string } | null> {
+  const url = `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`
+  try {
+    const u = new URL('https://en.wikipedia.org/w/api.php')
+    u.search = new URLSearchParams({ action: 'query', prop: 'extracts', explaintext: '1', exsectionformat: 'plain', redirects: '1', titles: title, format: 'json', origin: '*' }).toString()
+    const d = await getJson<{ query?: { pages?: Record<string, { extract?: string }> } }>(u.toString())
+    const text = Object.values(d.query?.pages ?? {})[0]?.extract?.replace(/\n{2,}/g, '\n').trim()
+    if (text) return { text: text.slice(0, 6000), url }
+  } catch { /* fall back to the short summary */ }
   try {
     const d = await getJson<{ extract?: string; content_urls?: { desktop?: { page?: string } } }>(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`)
@@ -179,7 +198,7 @@ export interface OsmEl { tags: Record<string, string>; lat: number; lon: number 
 export async function overpass(lat: number, lng: number): Promise<OsmEl[]> {
   const a = (r: number) => `(around:${r},${lat},${lng})`
   const q = `[out:json][timeout:25];
-nwr${a(30000)}[railway=station][name]; out center tags 15;
+nwr${a(50000)}[railway=station][name]; out center tags 20;
 nwr${a(20000)}[amenity=bus_station][name]; out center tags 8;
 nwr${a(150000)}[aeroway=aerodrome][iata]; out center tags 8;
 nwr${a(3000)}[tourism~"^(hostel|guest_house|hotel|motel|apartment)$"][name]; out center tags 25;

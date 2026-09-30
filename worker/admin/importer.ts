@@ -191,11 +191,16 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
       ai = await draftWithAi(env.ANTHROPIC_API_KEY, env.AI_MODEL || 'claude-haiku-4-5-20251001', {
         name: wd.name, kind,
         location: [wd.city, wd.district, wd.state, wd.country].filter(Boolean).join(', '),
-        description: wd.description, deity: wd.deity, wikipedia_extract: wiki?.text,
+        description: wd.description, deity: wd.deity, wikipedia_extract: wiki?.text, wikidata_facts: wd.facts,
         transport: sug?.transport, nearby: sug?.nearby,
       })
     } catch (e) { notes.push(`AI draft failed: ${(e as Error).message.slice(0, 80)}`) }
   }
+  if (ai) {
+    const got = [ai.summary && 'summary', ai.highlights && `${ai.highlights.length} highlights`, ai.how_to_reach && 'how to reach', ai.nearby?.length && 'nearby notes'].filter(Boolean)
+    notes.push(got.length ? `AI: ${got.join(', ')}` : 'AI found too little in the sources')
+  }
+  if (!wiki) notes.push('No English Wikipedia article')
   return { wd, sug, wiki, photo, ai, notes }
 }
 
@@ -325,10 +330,15 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
   fill('alt_names', g.wd.altNames.join(', ') || null)
   fill('state', g.wd.state); fill('district_city', g.wd.district); fill('city', g.wd.city)
   fill('lat', g.wd.lat); fill('lng', g.wd.lng)
-  if (!p.summary && g.ai?.summary) { set.summary = g.ai.summary; pending.add('summary') }
-  if (!hasHl && g.ai?.highlights) { set.highlights = JSON.stringify(g.ai.highlights); pending.add('highlights') }
-  if (!p.how_to_reach && g.ai?.how_to_reach) { set.how_to_reach = g.ai.how_to_reach; pending.add('how_to_reach') }
-  if (empty[3] && g.ai?.nearby?.length) pending.add('nearby')
+  // Text may be replaced when empty, still an unchecked AI draft, or written by the importer and untouched since.
+  const untouched = p.updated_by === 'importer'
+  const replaceable = (k: string, empty: boolean) => empty || pending.has(k) || untouched
+  if (g.ai?.summary && replaceable('summary', !p.summary)) { set.summary = g.ai.summary; pending.add('summary') }
+  if (g.ai?.highlights && replaceable('highlights', !hasHl)) { set.highlights = JSON.stringify(g.ai.highlights); pending.add('highlights') }
+  if (g.ai?.how_to_reach && replaceable('how_to_reach', !p.how_to_reach)) { set.how_to_reach = g.ai.how_to_reach; pending.add('how_to_reach') }
+  if (g.ai?.nearby?.length) pending.add('nearby')
+  const nearbyNotes = empty[3] ? [] : (g.ai?.nearby ?? []).map((n) => env.DB.prepare(
+    "UPDATE place_nearby SET what_to_expect = ? WHERE place_id = ? AND lower(name) = lower(?) AND (what_to_expect IS NULL OR what_to_expect = '')").bind(n.what_to_expect, id, n.name))
   if (!p.cover_photo && g.photo) {
     const key = await storePhoto(env, g.photo, String(p.slug)).catch(() => null)
     if (key) { set.cover_photo = key; set.cover_credit = g.photo.credit }
@@ -337,6 +347,7 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
   const cols = Object.keys(set)
   await env.DB.batch([
     env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(...cols.map((c) => set[c]), actor, id),
+    ...nearbyNotes,
     ...(p.kind === 'spiritual' && g.wd.deity ? [env.DB.prepare("INSERT INTO temple_details (place_id, main_deity) VALUES (?, ?) ON CONFLICT(place_id) DO UPDATE SET main_deity = COALESCE(NULLIF(temple_details.main_deity, ''), excluded.main_deity)").bind(id, g.wd.deity)] : []),
     ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: empty[4] || !(await hasAutoSources(env, id)), website: empty[5] }),
     env.DB.prepare("INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'enrich', 'place', ?)").bind(actor, String(id)),

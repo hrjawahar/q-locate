@@ -8,6 +8,7 @@ export interface AiFacts {
   description?: string
   deity?: string | null
   wikipedia_extract?: string
+  wikidata_facts?: Record<string, string>
   transport?: { type: string; name: string; code?: string | null; distance_km: number }[]
   nearby?: { name: string; kind: string; distance_km: number }[]
   existing_highlights?: string[]
@@ -62,7 +63,7 @@ export function parseDraft(text: string, facts: AiFacts): AiDraft | null {
   const summary = str(raw.summary, 260)
   if (summary) out.summary = summary
   const hl = Array.isArray(raw.highlights) ? raw.highlights.map((h) => str(h, 100)).filter(Boolean).slice(0, 5) : []
-  if (hl.length >= 2) out.highlights = hl
+  if (hl.length >= 1) out.highlights = hl
   const how = str(raw.how_to_reach, 600)
   if (how) out.how_to_reach = how
   const allowed = new Set((facts.nearby ?? []).map((n) => n.name.toLowerCase()))

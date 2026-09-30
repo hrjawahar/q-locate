@@ -1,4 +1,4 @@
-import { Env, json, splitList, photoUrls } from './util'
+import { Env, json, splitList, photoUrls, parseJson } from './util'
 
 // GET /api/index.json — compact list of every published place, for on-device search.
 export const indexJson = async (request: Request, env: Env, ctx: ExecutionContext) => {
@@ -10,7 +10,7 @@ export const indexJson = async (request: Request, env: Env, ctx: ExecutionContex
 
   const { results } = await env.DB.prepare(`
     SELECT p.slug, p.kind, p.name, p.alt_names, p.country, p.state, p.district_city, p.city, p.tags,
-           p.access_effort, p.cover_photo, v.best_months, v.typical_visit, t.main_deity,
+           p.access_effort, p.cover_photo, p.summary, v.best_months, v.typical_visit, t.main_deity, t.darshan_hours,
            (SELECT group_concat(c.slug) FROM place_categories pc JOIN categories c ON c.id = pc.category_id
              WHERE pc.place_id = p.id) AS categories,
            (SELECT group_concat(ci.slug) FROM place_circuits px JOIN circuits ci ON ci.id = px.circuit_id
@@ -38,6 +38,8 @@ export const indexJson = async (request: Request, env: Env, ctx: ExecutionContex
     typical_visit: r.typical_visit ?? null,
     access_effort: r.access_effort ?? null,
     thumb: photoUrls(r.cover_photo)?.thumb ?? null,
+    summary: typeof r.summary === 'string' ? r.summary.slice(0, 200) : '',
+    hours: parseJson(r.darshan_hours, []),
   }))
 
   const res = json({ version, count: places.length, places }, {

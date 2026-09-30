@@ -2,10 +2,18 @@ import { json } from '../util'
 import { img } from '../img'
 import { AdminEnv, getAdmin, lastAuthProblem } from './auth'
 import * as api from './api'
+import * as imp from './importer'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
 // every /api/admin call also checks the admins table.
+type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; IMPORT_BATCH?: string }
+
 export default {
+  // Every minute: import a few queued places in the background (safe to close the browser).
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(imp.processNext(env, Math.max(1, Number(env.IMPORT_BATCH) || 2)))
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
     const { pathname } = url
@@ -22,7 +30,7 @@ export default {
 
     const m = request.method
     const body = async () => (await request.json().catch(() => ({}))) as Record<string, unknown>
-    const idMatch = pathname.match(/^\/api\/admin\/places\/(\d+)(\/(status|verify))?$/)
+    const idMatch = pathname.match(/^\/api\/admin\/places\/(\d+)(\/(status|verify|enrich))?$/)
 
     try {
       if (pathname === '/api/admin/lookups' && m === 'GET') return api.lookups(env)
@@ -30,12 +38,26 @@ export default {
       if (pathname === '/api/admin/places' && m === 'POST') return api.savePlace(null, await body(), env, admin)
       if (pathname === '/api/admin/duplicates' && m === 'GET') return api.duplicates(url, env)
       if (pathname === '/api/admin/upload' && m === 'POST') return api.upload(request, env, admin)
+      if (pathname === '/api/admin/places/bulk' && m === 'POST') return api.bulkStatus(await body(), env, admin)
+      if (pathname === '/api/admin/wikidata/search' && m === 'GET') return imp.wikidataSearch(url)
+      if (pathname.startsWith('/api/admin/import/')) {
+        if (admin.role === 'editor') return json({ error: 'Only a publisher or owner can import' }, { status: 403 })
+        const action = pathname.slice('/api/admin/import/'.length)
+        if (action === 'presets' && m === 'GET') return imp.listPresets()
+        if (action === 'preview' && m === 'POST') return imp.preview(await body(), env)
+        if (action === 'queue' && m === 'POST') return imp.enqueue(await body(), env, admin)
+        if (action === 'status' && m === 'GET') return imp.status(env)
+        if (action === 'run' && m === 'POST') { await imp.processNext(env, 1); return imp.status(env) }
+        if (action === 'retry' && m === 'POST') return imp.retryErrors(env)
+        if (action === 'clear' && m === 'POST') return imp.clearPending(env)
+      }
       if (idMatch) {
         const id = Number(idMatch[1])
         if (!idMatch[2] && m === 'GET') return api.getPlace(id, env, admin)
         if (!idMatch[2] && m === 'PUT') return api.savePlace(id, await body(), env, admin)
         if (idMatch[3] === 'status' && m === 'POST') return api.setStatus(id, await body(), env, admin)
         if (idMatch[3] === 'verify' && m === 'POST') return api.markVerified(id, env, admin)
+        if (idMatch[3] === 'enrich' && m === 'POST') return imp.enrichPlace(id, await body(), env, admin)
       }
       if (pathname === '/api/admin/activity' && m === 'GET' && admin.role !== 'editor') return api.activity(env)
       if (pathname.startsWith('/api/admin/users')) {
@@ -49,4 +71,4 @@ export default {
       return json({ error: 'Something went wrong. Try again.' }, { status: 500 })
     }
   },
-} satisfies ExportedHandler<AdminEnv>
+} satisfies ExportedHandler<Env>

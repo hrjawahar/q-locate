@@ -6,6 +6,7 @@ import PlacesList from './PlacesList'
 import PlaceForm from './PlaceForm'
 import Users from './Users'
 import Activity from './Activity'
+import Import from './Import'
 
 export default function AdminApp() {
   const [me, setMe] = useState<Me | null>(null)
@@ -46,6 +47,7 @@ export default function AdminApp() {
           <span className="font-display font-bold mr-4">Q-Locate Admin</span>
           <nav className="flex gap-1 text-sm font-semibold">
             <NavLink to="/admin" end className={link}>Places</NavLink>
+            {me.role !== 'editor' && <NavLink to="/admin/import" className={link}>Import</NavLink>}
             {me.role !== 'editor' && <NavLink to="/admin/activity" className={link}>Activity</NavLink>}
             {me.role === 'owner' && <NavLink to="/admin/users" className={link}>Admins</NavLink>}
           </nav>
@@ -58,6 +60,7 @@ export default function AdminApp() {
           <Route path="places/new" element={<PlaceForm me={me} lookups={lookups} />} />
           <Route path="places/:id" element={<PlaceForm me={me} lookups={lookups} />} />
           {me.role !== 'editor' && <Route path="activity" element={<Activity />} />}
+          {me.role !== 'editor' && <Route path="import" element={<Import me={me} />} />}
           {me.role === 'owner' && <Route path="users" element={<Users me={me} />} />}
         </Routes>
       </div>

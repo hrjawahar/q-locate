@@ -3,13 +3,13 @@ import { AdminEnv, Admin, canPublish, inScope } from './auth'
 
 type Body = Record<string, unknown>
 
-const PLACE_FIELDS = ['kind', 'name', 'alt_names', 'country', 'state', 'district_city', 'lat', 'lng', 'summary',
-  'highlights', 'how_to_reach', 'stay_nearby', 'amenities', 'entry_fee', 'access_effort', 'access_notes', 'timings',
-  'tags', 'cover_photo', 'source_reel_url', 'creator_handle'] as const
+const PLACE_FIELDS = ['kind', 'name', 'alt_names', 'country', 'state', 'district_city', 'city', 'lat', 'lng', 'summary',
+  'highlights', 'how_to_reach', 'amenities', 'amenities_notes', 'entry_fee', 'access_effort', 'access_notes', 'timings',
+  'tags', 'cover_photo', 'cover_credit', 'ai_pending'] as const
 const VAC_FIELDS = ['best_months', 'typical_visit', 'trek_grade', 'trek_notes'] as const
 const TEMPLE_FIELDS = ['main_deity', 'tradition', 'significance', 'darshan_hours', 'dress_code', 'festivals',
   'pooja_booking_url', 'photography', 'prasadam'] as const
-const JSON_FIELDS = new Set(['highlights', 'amenities', 'darshan_hours'])
+const JSON_FIELDS = new Set(['highlights', 'amenities', 'darshan_hours', 'ai_pending', 'facilities'])
 
 const clean = (v: unknown, key: string) => {
   if (JSON_FIELDS.has(key)) return Array.isArray(v) ? JSON.stringify(v) : v == null || v === '' ? null : String(v)
@@ -42,14 +42,34 @@ async function loadPlace(env: AdminEnv, id: number) {
     env.DB.prepare('SELECT circuit_id, position FROM place_circuits WHERE place_id = ?').bind(id),
     env.DB.prepare('SELECT type, label, value FROM place_contacts WHERE place_id = ? ORDER BY id').bind(id),
   ])
+  const kids = await env.DB.batch(CHILDREN.map((c) => env.DB.prepare(`SELECT ${c.cols.join(', ')} FROM ${c.table} WHERE place_id = ? ORDER BY sort, id`).bind(id)))
   const d = (det.results[0] ?? {}) as Record<string, unknown>
   return {
-    place: { ...p, highlights: parseJson<string[]>(p.highlights, []), amenities: parseJson<string[]>(p.amenities, []) } as Record<string, unknown>,
+    place: { ...p, highlights: parseJson<string[]>(p.highlights, []), amenities: parseJson<string[]>(p.amenities, []), ai_pending: parseJson<string[]>(p.ai_pending, []) } as Record<string, unknown>,
     details: { ...d, darshan_hours: parseJson(d.darshan_hours, []) },
     category_ids: (cats.results as { category_id: number }[]).map((r) => r.category_id),
     circuits: circs.results,
     contacts: contacts.results,
+    ...Object.fromEntries(CHILDREN.map((c, i) => [c.key, (kids[i].results as Record<string, unknown>[]).map((r) =>
+      c.key === 'transport' ? { ...r, facilities: parseJson(r.facilities, {}) } : r)])),
   }
+}
+
+// Repeatable sections (+ Add): replaced as a whole on every save.
+const CHILDREN = [
+  { key: 'transport', table: 'place_transport', cols: ['type', 'name', 'code', 'distance_km', 'facilities', 'notes'] },
+  { key: 'stays', table: 'place_stays', cols: ['name', 'type', 'distance_km', 'price_from', 'currency', 'price_checked_on', 'phone', 'booking_url', 'is_partner'] },
+  { key: 'eateries', table: 'place_eateries', cols: ['name', 'pure_veg', 'distance_km', 'phone', 'is_partner'] },
+  { key: 'nearby', table: 'place_nearby', cols: ['name', 'kind', 'distance_km', 'what_to_expect', 'linked_place_id'] },
+  { key: 'sources', table: 'place_sources', cols: ['type', 'url', 'creator_handle', 'credit'] },
+] as const
+const NUM_COLS = new Set(['distance_km', 'price_from', 'linked_place_id'])
+const BOOL_COLS = new Set(['is_partner', 'pure_veg'])
+const cleanChild = (v: unknown, col: string) => {
+  if (BOOL_COLS.has(col)) return v === true || v === 1 || v === '1' ? 1 : 0
+  if (NUM_COLS.has(col)) { const n = Number(v); return v === '' || v == null || Number.isNaN(n) ? null : n }
+  if (col === 'facilities') return v && typeof v === 'object' ? JSON.stringify(v) : null
+  return clean(v, col)
 }
 
 function publishProblems(p: Record<string, unknown>, catCount: number) {
@@ -59,6 +79,8 @@ function publishProblems(p: Record<string, unknown>, catCount: number) {
   if (catCount < 1) problems.push('At least 1 category')
   if (parseJson<string[]>(p.highlights, []).filter(Boolean).length < 3) problems.push('At least 3 highlights')
   if (!p.cover_photo) problems.push('Cover photo')
+  const ai = parseJson<string[]>(p.ai_pending, [])
+  if (ai.length) problems.push(`Check the AI drafts (${ai.join(', ').replace(/_/g, ' ')})`)
   return problems
 }
 
@@ -70,11 +92,12 @@ export async function listPlaces(url: URL, env: AdminEnv, a: Admin) {
   const q = url.searchParams.get('q')?.trim()
   if (a.scope !== 'all') { where.push('kind = ?'); binds.push(a.scope) }
   else if (kind === 'vacation' || kind === 'spiritual') { where.push('kind = ?'); binds.push(kind) }
-  if (status === 'stale') where.push("status = 'published' AND (verified_on IS NULL OR verified_on < date('now','-12 months'))")
+  if (status === 'imported') where.push("needs_review = 1 AND status IN ('draft','review')")
+  else if (status === 'stale') where.push("status = 'published' AND (verified_on IS NULL OR verified_on < date('now','-12 months'))")
   else if (status) { where.push('status = ?'); binds.push(status) }
   if (q) { where.push('(name LIKE ? OR alt_names LIKE ? OR state LIKE ?)'); binds.push(`%${q}%`, `%${q}%`, `%${q}%`) }
   const { results } = await env.DB.prepare(
-    `SELECT id, slug, kind, name, state, district_city, status, verified_on, updated_at, updated_by, cover_photo
+    `SELECT id, slug, kind, name, country, state, district_city, status, verified_on, updated_at, updated_by, cover_photo, needs_review, ai_pending
      FROM places ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY updated_at DESC LIMIT 500`,
   ).bind(...binds).all()
   return json({ places: results })
@@ -138,6 +161,18 @@ export async function savePlace(id: number | null, body: Body, env: AdminEnv, a:
     for (const c of body.circuits as Body[]) stmts.push(env.DB.prepare('INSERT OR IGNORE INTO place_circuits (place_id, circuit_id, position) VALUES (?, ?, ?)')
       .bind(placeId, Number(c.circuit_id), c.position === '' || c.position == null ? null : Number(c.position)))
   }
+  for (const c of CHILDREN) {
+    const rows = body[c.key]
+    if (!Array.isArray(rows)) continue
+    stmts.push(env.DB.prepare(`DELETE FROM ${c.table} WHERE place_id = ?`).bind(placeId))
+    ;(rows as Body[]).forEach((r, i) => {
+      const vals = c.cols.map((col) => cleanChild(r[col], col))
+      const hasContent = c.key === 'transport' ? (r.name || r.notes) : c.key === 'sources' ? (r.url || r.creator_handle || r.credit) : r.name
+      if (!hasContent) return
+      stmts.push(env.DB.prepare(`INSERT INTO ${c.table} (place_id, ${c.cols.join(', ')}, sort) VALUES (?, ${c.cols.map(() => '?').join(', ')}, ?)`)
+        .bind(placeId, ...vals, i))
+    })
+  }
   if (Array.isArray(body.contacts)) {
     stmts.push(env.DB.prepare('DELETE FROM place_contacts WHERE place_id = ?').bind(placeId))
     for (const c of body.contacts as Body[]) {
@@ -163,10 +198,23 @@ export async function setStatus(id: number, body: Body, env: AdminEnv, a: Admin)
     const problems = publishProblems(p, cats ?? 0)
     if (problems.length) return json({ error: `Missing before publishing: ${problems.join(', ')}` }, { status: 400 })
   }
-  await env.DB.prepare("UPDATE places SET status = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?").bind(status, a.email, id).run()
+  await env.DB.prepare(`UPDATE places SET status = ?, ${status === 'published' ? 'needs_review = 0, ' : ''}updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(status, a.email, id).run()
   if (status === 'published' || p.status === 'published') await bumpIndex(env)
   await audit(env, a, `status:${status}`, 'place', id)
   return json({ ok: true, status })
+}
+
+/** Publish or archive several places at once; each is checked on its own. */
+export async function bulkStatus(body: Body, env: AdminEnv, a: Admin) {
+  const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter((n) => n > 0).slice(0, 200) : []
+  const status = String(body.status)
+  const results: { id: number; ok: boolean; error?: string }[] = []
+  for (const id of ids) {
+    const r = await setStatus(id, { status }, env, a)
+    const d = (await r.json()) as { error?: string }
+    results.push({ id, ok: r.ok, error: d.error })
+  }
+  return json({ results })
 }
 
 export async function markVerified(id: number, env: AdminEnv, a: Admin) {

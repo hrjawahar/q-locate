@@ -9,7 +9,7 @@ export const indexJson = async (request: Request, env: Env, ctx: ExecutionContex
   if (hit) return hit
 
   const { results } = await env.DB.prepare(`
-    SELECT p.slug, p.kind, p.name, p.alt_names, p.country, p.state, p.district_city, p.tags,
+    SELECT p.slug, p.kind, p.name, p.alt_names, p.country, p.state, p.district_city, p.city, p.tags,
            p.access_effort, p.cover_photo, v.best_months, v.typical_visit, t.main_deity,
            (SELECT group_concat(c.slug) FROM place_categories pc JOIN categories c ON c.id = pc.category_id
              WHERE pc.place_id = p.id) AS categories,
@@ -29,6 +29,7 @@ export const indexJson = async (request: Request, env: Env, ctx: ExecutionContex
     country: r.country,
     state: r.state ?? '',
     district_city: r.district_city ?? '',
+    city: r.city ?? '',
     tags: r.tags ?? '',
     deity: r.main_deity ?? '',
     categories: splitList(r.categories),

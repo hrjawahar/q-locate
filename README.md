@@ -62,3 +62,10 @@ A second Worker from the same repo, locked by Cloudflare Access. Config: `wrangl
 Deploy command in Cloudflare: `npx wrangler deploy --config wrangler.admin.toml`.
 After enabling Access, set `TEAM_DOMAIN` and `POLICY_AUD` in `wrangler.admin.toml`.
 Local test: `npx wrangler dev -c wrangler.admin.toml --var DEV_ADMIN_EMAIL:you@example.com` (only works on localhost).
+
+## v2: richer pages, importer, AI drafts
+
+- Database upgrade (once): paste `d1-console/3-upgrade-v2.sql` into the D1 Console.
+- AI drafting: add a **Secret** `ANTHROPIC_API_KEY` to q-locate-admin (Settings → Variables and Secrets). Model is set by `AI_MODEL` in `wrangler.admin.toml`.
+- Importer: admin → Import. Queued places import every minute (cron, `IMPORT_BATCH` per run) or faster with "Import faster" while the page is open.
+- Sources: Wikidata (CC0), Wikipedia (reference text for AI only), Wikimedia Commons (photos with credit), OpenStreetMap via Overpass (ODbL, credited).

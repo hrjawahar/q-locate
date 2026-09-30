@@ -11,6 +11,8 @@ run_worker_first = ["/", "/api/*", "/img/*"]
 [vars]
 TEAM_DOMAIN = "crimson-bread-7516.cloudflareaccess.com"
 POLICY_AUD = ""
+AI_MODEL = "claude-haiku-4-5-20251001"
+IMPORT_BATCH = "2"
 
 [[d1_databases]]
 binding = "DB"
@@ -21,3 +23,6 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "PHOTOS"
 bucket_name = "q-locate-photos"
+
+[triggers]
+crons = ["* * * * *"]

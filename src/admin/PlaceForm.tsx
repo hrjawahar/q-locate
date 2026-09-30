@@ -17,8 +17,8 @@ const STAY_TYPES: [string, string][] = [['hostel', 'Hostel'], ['dorm', 'Dormitor
   ['hotel', 'Hotel'], ['resort', 'Resort'], ['dharmashala', 'Dharmashala / choultry']]
 const NEARBY_KINDS: [string, string][] = [['temple', 'Temple'], ['attraction', 'Attraction'], ['viewpoint', 'Viewpoint'], ['waterfall', 'Waterfall'],
   ['peak', 'Peak'], ['beach', 'Beach'], ['other', 'Other']]
-const SOURCE_TYPES: [string, string][] = [['reel', 'Reel'], ['video', 'Video'], ['article', 'Article / blog'], ['official', 'Official site'],
-  ['wikidata', 'Wikidata'], ['wikipedia', 'Wikipedia'], ['osm', 'OpenStreetMap'], ['photo', 'Photo credit'], ['other', 'Other']]
+const SOURCE_TYPES: [string, string][] = [['reel', 'Reel'], ['video', 'Video'], ['article', 'Article / blog'], ['official', 'Official site'], ['other', 'Other']]
+const AUTO_SOURCES = new Set(['wikidata', 'wikipedia', 'osm', 'photo', 'ai'])
 const FACILITIES: [string, string][] = [['retiring_room', 'Retiring rooms (paid)'], ['dormitory', 'Dormitory (paid)'], ['ac_waiting_hall', 'AC waiting hall (paid)']]
 
 type Obj = Record<string, any>
@@ -411,10 +411,14 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
         </Section>
 
         <Section n={14} title="Sources, credits and search words">
-          <p className="m-0 text-sm text-muted">Credit every creator and source you used. Shown at the bottom of the page.</p>
-          {d.sources.map((s, i) => (
+          <p className="m-0 text-sm text-muted">Credit the creators and sources specific to this place. Wikidata, OpenStreetMap, Wikimedia Commons, Wikipedia and AI assistance are credited once for the whole app, and the photo credit is in section 2.</p>
+          {(d.place.wikidata_id || d.sources.some((s) => AUTO_SOURCES.has(s.type))) && (
+            <p className="m-0 text-sm">For checking: {d.place.wikidata_id && <a href={`https://www.wikidata.org/wiki/${d.place.wikidata_id}`} target="_blank" rel="noreferrer" className="mr-3">Wikidata ↗</a>}
+              {d.sources.filter((s) => s.type === 'wikipedia' && s.url).map((s, i) => <a key={i} href={s.url} target="_blank" rel="noreferrer" className="mr-3">Wikipedia ↗</a>)}</p>
+          )}
+          {d.sources.map((s, i) => AUTO_SOURCES.has(s.type) ? null : (
             <RowCard key={i} onRemove={() => removeRow('sources', i)}>
-              <Field label="Type"><select className={inp} value={s.type} onChange={(e) => setRow('sources', i, 'type', e.target.value)}>{SOURCE_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}{s.type === 'ai' && <option value="ai">AI-assisted</option>}</select></Field>
+              <Field label="Type"><select className={inp} value={s.type} onChange={(e) => setRow('sources', i, 'type', e.target.value)}>{SOURCE_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
               <Field label="Link" className="sm:col-span-3"><input className={inp} type="url" value={s.url ?? ''} onChange={(e) => setRow('sources', i, 'url', e.target.value)} /></Field>
               <Field label="Creator handle" className="sm:col-span-2"><input className={inp} placeholder="@creator" value={s.creator_handle ?? ''} onChange={(e) => setRow('sources', i, 'creator_handle', e.target.value)} /></Field>
               <Field label="Credit line" className="sm:col-span-6"><input className={inp} value={s.credit ?? ''} onChange={(e) => setRow('sources', i, 'credit', e.target.value)} /></Field>

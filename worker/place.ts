@@ -22,7 +22,7 @@ export const place = async (env: Env, slug: string) => {
     env.DB.prepare('SELECT name, pure_veg, distance_km, phone, is_partner FROM place_eateries WHERE place_id = ? ORDER BY is_partner DESC, sort, id').bind(id),
     env.DB.prepare(`SELECT n.name, n.kind, n.distance_km, n.what_to_expect, l.slug AS linked_slug, l.kind AS linked_kind FROM place_nearby n
                     LEFT JOIN places l ON l.id = n.linked_place_id AND l.status = 'published' WHERE n.place_id = ? ORDER BY n.sort, n.id`).bind(id),
-    env.DB.prepare("SELECT type, url, creator_handle, credit FROM place_sources WHERE place_id = ? AND type != 'ai' ORDER BY sort, id").bind(id),
+    env.DB.prepare("SELECT type, url, creator_handle, credit FROM place_sources WHERE place_id = ? AND type NOT IN ('ai','wikidata','wikipedia','osm','photo') ORDER BY sort, id").bind(id),
   ])
 
   const d = (details.results[0] ?? {}) as Record<string, unknown>
@@ -45,7 +45,6 @@ export const place = async (env: Env, slug: string) => {
     eateries: eateries.results,
     nearby: nearby.results,
     sources: sources.results,
-    ai_assisted: (await env.DB.prepare("SELECT 1 FROM place_sources WHERE place_id = ? AND type = 'ai'").bind(id).first()) != null,
     photos: (photos.results as { r2_key: string; credit: string | null }[]).map((ph) => ({
       ...photoUrls(ph.r2_key),
       credit: ph.credit,

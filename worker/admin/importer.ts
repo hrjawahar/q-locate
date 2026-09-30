@@ -236,11 +236,8 @@ function childStatements(env: Env, placeId: number, g: Gathered, only: { transpo
   })
   if (only.website && g.wd.website) P("INSERT INTO place_contacts (place_id, type, label, value) VALUES (?, 'website', 'Official website', ?)", placeId, g.wd.website)
   if (only.sources) {
-    const src: [string, string | null, string][] = [['wikidata', `https://www.wikidata.org/wiki/${g.wd.id}`, 'Wikidata (CC0)']]
-    if (g.wiki) src.push(['wikipedia', g.wiki.url, 'Wikipedia (reference)'])
-    if (g.osm) src.push(['osm', 'https://www.openstreetmap.org/copyright', '© OpenStreetMap contributors (ODbL)'])
-    if (g.photo) src.push(['photo', g.photo.page, g.photo.credit])
-    if (g.ai) src.push(['ai', null, 'Text drafted with AI from the sources above and checked by Q-Locate'])
+    // Wikidata, OpenStreetMap, Commons and AI are credited once, site-wide. Only the Wikipedia link is kept per place, to check AI drafts against.
+    const src: [string, string | null, string][] = g.wiki ? [['wikipedia', g.wiki.url, 'Wikipedia (reference)']] : []
     src.forEach(([t, u, c], i) => P('INSERT INTO place_sources (place_id, type, url, credit, sort) VALUES (?, ?, ?, ?, ?)', placeId, t, u, c, 100 + i))
   }
   return s
@@ -358,14 +355,14 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
     env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(...cols.map((c) => set[c]), actor, id),
     ...nearbyNotes,
     ...(p.kind === 'spiritual' && g.wd.deity ? [env.DB.prepare("INSERT INTO temple_details (place_id, main_deity) VALUES (?, ?) ON CONFLICT(place_id) DO UPDATE SET main_deity = COALESCE(NULLIF(temple_details.main_deity, ''), excluded.main_deity)").bind(id, g.wd.deity)] : []),
-    ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: empty[4] || !(await hasAutoSources(env, id)), website: empty[5] }),
+    ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: !(await hasAutoSources(env, id)), website: empty[5] }),
     env.DB.prepare("INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'enrich', 'place', ?)").bind(actor, String(id)),
   ])
   return { filled: cols.filter((c) => c !== 'ai_pending' && c !== 'wikidata_id'), notes: g.notes }
 }
 
 async function hasAutoSources(env: Env, id: number) {
-  return !!(await env.DB.prepare("SELECT 1 FROM place_sources WHERE place_id = ? AND type = 'wikidata'").bind(id).first())
+  return !!(await env.DB.prepare("SELECT 1 FROM place_sources WHERE place_id = ? AND type = 'wikipedia'").bind(id).first())
 }
 
 export async function wikidataSearch(url: URL) {

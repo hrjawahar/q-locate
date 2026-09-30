@@ -187,10 +187,19 @@ nwr${a(1500)}[amenity~"^(restaurant|cafe|fast_food)$"][name]; out center tags 25
 nwr${a(10000)}[amenity=place_of_worship][religion~"^(hindu|jain|sikh|buddhist)$"][name]; out center tags 25;
 nwr${a(15000)}[tourism~"^(attraction|viewpoint)$"][name]; out center tags 20;
 nwr${a(15000)}[natural~"^(waterfall|peak|beach)$"][name]; out center tags 15;`
-  const d = await getJson<{ elements?: { lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[] }>(
-    'https://overpass-api.de/api/interpreter',
-    { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ data: q }).toString() },
-  )
+  type Resp = { elements?: { lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[]; remark?: string }
+  // Public Overpass servers often refuse cloud traffic or time out, so try mirrors in turn.
+  const servers = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter']
+  const problems: string[] = []
+  let d: Resp | null = null
+  for (const server of servers) {
+    try {
+      const r = await getJson<Resp>(server, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ data: q }).toString() })
+      if (r.remark && /timed out|runtime error/i.test(r.remark) && !(r.elements ?? []).length) { problems.push(`${new URL(server).hostname}: ${r.remark.slice(0, 60)}`); continue }
+      d = r; break
+    } catch (e) { problems.push((e as Error).message) }
+  }
+  if (!d) throw new Error(`OpenStreetMap servers unavailable (${problems.join('; ')})`)
   return (d.elements ?? []).flatMap((e) => {
     const la = e.lat ?? e.center?.lat, lo = e.lon ?? e.center?.lon
     return la != null && lo != null && e.tags ? [{ tags: e.tags, lat: la, lon: lo }] : []

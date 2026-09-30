@@ -57,6 +57,10 @@ export default function PlacesList({ me }: { me: Me }) {
           <b>{sel.size} selected</b>
           <button className="h-10 px-3 rounded-lg bg-saffron text-maroon font-semibold" onClick={() => bulk('published')}>Publish</button>
           <button className="h-10 px-3 rounded-lg border border-stone-300 bg-white font-semibold" onClick={() => bulk('archived')}>Archive</button>
+          <button className="h-10 px-3 rounded-lg border border-stone-300 bg-white font-semibold" onClick={async () => {
+            const s = await api<{ counts: Record<string, number> }>('/import/refill', { method: 'POST', json: { ids: [...sel] } })
+            setMsg(`Queued to refill empty fields from open sources (only places linked to Wikidata). ${s.counts.pending} waiting — see the Import page.`)
+          }}>Refill from sources</button>
           <span className="text-muted">Only places with every required field and checked AI drafts will publish.</span>
         </div>
       )}

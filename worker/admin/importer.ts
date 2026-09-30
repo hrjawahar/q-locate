@@ -144,7 +144,7 @@ export async function clearPending(env: AdminEnv) {
 // ---------------- processing ----------------
 
 type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string }
-interface QueueRow { id: number; wikidata_id: string; kind: Kind; category_slug: string | null; circuit_slug: string | null; circuit_position: number | null }
+interface QueueRow { id: number; wikidata_id: string; kind: Kind; category_slug: string | null; circuit_slug: string | null; circuit_position: number | null; place_id: number | null }
 
 export async function processNext(env: Env, max: number) {
   // Items stuck in "processing" for 10+ minutes are retried (up to 3 attempts).
@@ -155,10 +155,12 @@ export async function processNext(env: Env, max: number) {
   for (let n = 0; n < max; n++) {
     const row = await env.DB.prepare(`UPDATE import_queue SET status = 'processing', attempts = attempts + 1, started_at = datetime('now')
       WHERE id = (SELECT id FROM import_queue WHERE status = 'pending' ORDER BY id LIMIT 1)
-      RETURNING id, wikidata_id, kind, category_slug, circuit_slug, circuit_position`).first<QueueRow>()
+      RETURNING id, wikidata_id, kind, category_slug, circuit_slug, circuit_position, place_id`).first<QueueRow>()
     if (!row) break
     try {
-      const r = await importOne(env, row)
+      const r = row.place_id
+        ? await fillExisting(env, row.place_id, row.wikidata_id, 'importer').then((x) => ({ placeId: row.place_id, skipped: false, note: x.notes.join('; ') || `Refilled: ${x.filled.join(', ') || 'lists only'}` }))
+        : await importOne(env, row)
       await env.DB.prepare("UPDATE import_queue SET status = ?, place_id = ?, error = ?, finished_at = datetime('now') WHERE id = ?")
         .bind(r.skipped ? 'skipped' : 'done', r.placeId, r.note ?? null, row.id).run()
     } catch (e) {
@@ -177,12 +179,13 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
   const wd = await wdPlace(wikidataId)
   const [wiki, photo, sug] = await Promise.all([
     wd.wikiTitle ? wikiExtract(wd.wikiTitle) : Promise.resolve(null),
-    wd.image ? commonsPhoto(wd.image).catch(() => { notes.push('photo lookup failed'); return null }) : Promise.resolve(null),
+    wd.image ? commonsPhoto(wd.image).catch((e) => { notes.push(`Photo lookup failed: ${(e as Error).message.slice(0, 80)}`); return null }) : Promise.resolve((notes.push('No photo on Wikidata'), null)),
     wd.lat != null && wd.lng != null
-      ? overpass(wd.lat, wd.lng).then((els) => suggestions(els, [wd.lat!, wd.lng!], wd.name)).catch(() => { notes.push('OpenStreetMap lookup failed'); return null })
-      : Promise.resolve(null),
+      ? overpass(wd.lat, wd.lng).then((els) => suggestions(els, [wd.lat!, wd.lng!], wd.name)).catch((e) => { notes.push((e as Error).message.slice(0, 160)); return null })
+      : Promise.resolve((notes.push('No coordinates on Wikidata, so no nearby lookups'), null)),
   ])
   let ai: AiDraft | null = null
+  if (wantAi && !env.ANTHROPIC_API_KEY) notes.push('AI off: ANTHROPIC_API_KEY secret not set')
   if (wantAi && env.ANTHROPIC_API_KEY) {
     try {
       ai = await draftWithAi(env.ANTHROPIC_API_KEY, env.AI_MODEL || 'claude-haiku-4-5-20251001', {
@@ -262,7 +265,7 @@ async function importOne(env: Env, row: QueueRow): Promise<{ placeId: number | n
   let slug = slugify(`${wd.name} ${wd.state ?? wd.country ?? ''}`) || wd.id.toLowerCase()
   if (await env.DB.prepare('SELECT 1 FROM places WHERE slug = ?').bind(slug).first()) slug = `${slug}-${wd.id.toLowerCase()}`
   let cover: string | null = null
-  if (g.photo) cover = await storePhoto(env, g.photo, slug).catch(() => { g.notes.push('photo download failed'); return null })
+  if (g.photo) cover = await storePhoto(env, g.photo, slug).catch((e) => { g.notes.push(`Photo download failed: ${(e as Error).message.slice(0, 80)}`); return null })
 
   const r = await env.DB.prepare(`INSERT INTO places (kind, slug, name, alt_names, country, state, district_city, city, lat, lng, summary, highlights, how_to_reach,
       cover_photo, cover_credit, wikidata_id, needs_review, ai_pending, status, created_by, updated_by)
@@ -286,14 +289,31 @@ async function importOne(env: Env, row: QueueRow): Promise<{ placeId: number | n
 
 /** "Fill from open sources" on an existing place: only empty fields and empty lists are filled. */
 export async function enrichPlace(id: number, body: Record<string, unknown>, env: Env, a: Admin) {
-  const p = await env.DB.prepare('SELECT * FROM places WHERE id = ?').bind(id).first<Record<string, unknown>>()
+  const p = await env.DB.prepare('SELECT kind, wikidata_id FROM places WHERE id = ?').bind(id).first<Record<string, unknown>>()
   if (!p) return json({ error: 'not_found' }, { status: 404 })
   if (a.scope !== 'all' && a.scope !== p.kind) return json({ error: 'Outside your scope' }, { status: 403 })
   const wikidataId = typeof body.wikidata_id === 'string' && /^Q\d+$/.test(body.wikidata_id) ? body.wikidata_id : (p.wikidata_id as string | null)
   if (!wikidataId) return json({ error: 'Link this place to Wikidata first' }, { status: 400 })
   const clash = await env.DB.prepare('SELECT id FROM places WHERE wikidata_id = ? AND id != ?').bind(wikidataId, id).first<number>('id')
   if (clash) return json({ error: `That Wikidata item is already linked to place #${clash}` }, { status: 400 })
+  const r = await fillExisting(env, id, wikidataId, a.email)
+  return json({ ok: true, ...r })
+}
 
+/** Queue existing places (that have a Wikidata link) to be refilled in the background. */
+export async function enqueueRefill(body: Record<string, unknown>, env: AdminEnv, a: Admin) {
+  const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter((n) => n > 0).slice(0, 500) : []
+  const stmts = ids.map((id) => env.DB.prepare(
+    `INSERT INTO import_queue (wikidata_id, label, kind, place_id, queued_by)
+     SELECT wikidata_id, name, kind, id, ? FROM places WHERE id = ? AND wikidata_id IS NOT NULL AND (? = 'all' OR kind = ?)
+       AND NOT EXISTS (SELECT 1 FROM import_queue q WHERE q.place_id = places.id AND q.status IN ('pending','processing'))`,
+  ).bind(a.email, id, a.scope, a.scope))
+  for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50))
+  return status(env)
+}
+
+async function fillExisting(env: Env, id: number, wikidataId: string, actor: string) {
+  const p = (await env.DB.prepare('SELECT * FROM places WHERE id = ?').bind(id).first<Record<string, unknown>>())!
   const g = await gather(env, wikidataId, p.kind as Kind, true)
   const counts = await env.DB.batch(['place_transport', 'place_stays', 'place_eateries', 'place_nearby', 'place_sources', 'place_contacts']
     .map((t) => env.DB.prepare(`SELECT count(*) AS n FROM ${t} WHERE place_id = ?`).bind(id)))
@@ -316,12 +336,12 @@ export async function enrichPlace(id: number, body: Record<string, unknown>, env
   set.ai_pending = JSON.stringify([...pending])
   const cols = Object.keys(set)
   await env.DB.batch([
-    env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(...cols.map((c) => set[c]), a.email, id),
+    env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(...cols.map((c) => set[c]), actor, id),
     ...(p.kind === 'spiritual' && g.wd.deity ? [env.DB.prepare("INSERT INTO temple_details (place_id, main_deity) VALUES (?, ?) ON CONFLICT(place_id) DO UPDATE SET main_deity = COALESCE(NULLIF(temple_details.main_deity, ''), excluded.main_deity)").bind(id, g.wd.deity)] : []),
     ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: empty[4] || !(await hasAutoSources(env, id)), website: empty[5] }),
-    env.DB.prepare("INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'enrich', 'place', ?)").bind(a.email, String(id)),
+    env.DB.prepare("INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'enrich', 'place', ?)").bind(actor, String(id)),
   ])
-  return json({ ok: true, filled: cols.filter((c) => c !== 'ai_pending'), notes: g.notes })
+  return { filled: cols.filter((c) => c !== 'ai_pending' && c !== 'wikidata_id'), notes: g.notes }
 }
 
 async function hasAutoSources(env: Env, id: number) {

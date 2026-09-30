@@ -50,6 +50,7 @@ export default {
         if (action === 'run' && m === 'POST') { await imp.processNext(env, 1); return imp.status(env) }
         if (action === 'retry' && m === 'POST') return imp.retryErrors(env)
         if (action === 'clear' && m === 'POST') return imp.clearPending(env)
+        if (action === 'refill' && m === 'POST') return imp.enqueueRefill(await body(), env, admin)
       }
       if (idMatch) {
         const id = Number(idMatch[1])

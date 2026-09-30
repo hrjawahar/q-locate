@@ -185,6 +185,29 @@ export async function download(url: string): Promise<{ body: ArrayBuffer; type: 
   return { body: await res.arrayBuffer(), type }
 }
 
+// ---------- Stations and airports from Wikidata (fast, reliable, official station codes) ----------
+
+export interface Hub { type: 'rail' | 'air'; name: string; code: string | null; distance_km: number }
+export async function wdTransport(lat: number, lng: number): Promise<Hub[]> {
+  const around = (r: number) => `SERVICE wikibase:around { ?s wdt:P625 ?loc . bd:serviceParam wikibase:center "Point(${lng} ${lat})"^^geo:wktLiteral . bd:serviceParam wikibase:radius "${r}" . bd:serviceParam wikibase:distance ?dist . }`
+  const rows = await sparql(`SELECT ?kind ?s ?sLabel ?code ?dist WHERE {
+ { ${around(60)} ?s wdt:P31/wdt:P279* wd:Q55488 . FILTER NOT EXISTS { ?s wdt:P31/wdt:P279* wd:Q928830 } OPTIONAL { ?s wdt:P5696 ?code } BIND("rail" AS ?kind) }
+ UNION
+ { ${around(200)} ?s wdt:P238 ?code . ?s wdt:P31/wdt:P279* wd:Q1248784 . BIND("air" AS ?kind) }
+ SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+} ORDER BY ?dist LIMIT 40`)
+  const seen = new Set<string>()
+  const out: Hub[] = []
+  for (const r of rows) {
+    const kind = r.kind?.value === 'air' ? 'air' : 'rail'
+    const name = r.sLabel?.value
+    if (!name || /^Q\d+$/.test(name) || seen.has(name)) continue
+    seen.add(name)
+    out.push({ type: kind, name, code: r.code?.value ?? null, distance_km: Math.round(Number(r.dist?.value ?? 0) * 10) / 10 })
+  }
+  return [...out.filter((h) => h.type === 'rail').slice(0, 2), ...out.filter((h) => h.type === 'air').slice(0, 1)]
+}
+
 // ---------- OpenStreetMap ----------
 
 export const km = (a: [number, number], b: [number, number]) => {
@@ -197,15 +220,13 @@ export const km = (a: [number, number], b: [number, number]) => {
 export interface OsmEl { tags: Record<string, string>; lat: number; lon: number }
 export async function overpass(lat: number, lng: number): Promise<OsmEl[]> {
   const a = (r: number) => `(around:${r},${lat},${lng})`
-  const q = `[out:json][timeout:25];
-nwr${a(50000)}[railway=station][name]; out center tags 20;
+  const q = `[out:json][timeout:40];
 nwr${a(20000)}[amenity=bus_station][name]; out center tags 8;
-nwr${a(150000)}[aeroway=aerodrome][iata]; out center tags 8;
 nwr${a(3000)}[tourism~"^(hostel|guest_house|hotel|motel|apartment)$"][name]; out center tags 25;
 nwr${a(1500)}[amenity~"^(restaurant|cafe|fast_food)$"][name]; out center tags 25;
 nwr${a(10000)}[amenity=place_of_worship][religion~"^(hindu|jain|sikh|buddhist)$"][name]; out center tags 25;
-nwr${a(15000)}[tourism~"^(attraction|viewpoint)$"][name]; out center tags 20;
-nwr${a(15000)}[natural~"^(waterfall|peak|beach)$"][name]; out center tags 15;`
+nwr${a(12000)}[tourism~"^(attraction|viewpoint)$"][name]; out center tags 20;
+node${a(12000)}[natural~"^(waterfall|peak|beach)$"][name]; out tags 15;`
   type Resp = { elements?: { lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[]; remark?: string }
   // Public Overpass servers often refuse cloud traffic or time out, so try mirrors in turn.
   const servers = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter']
@@ -230,7 +251,7 @@ const webOf = (t: Record<string, string>) => t.website ?? t['contact:website'] ?
 const nameOf = (t: Record<string, string>) => t['name:en'] ?? t.name
 
 export interface Suggestions {
-  transport: { type: 'rail' | 'bus' | 'air'; name: string; code: string | null; distance_km: number }[]
+  transport: { type: 'rail' | 'bus' | 'air'; name: string; code: string | null; distance_km: number }[]  // bus only from OSM; rail/air from Wikidata
   stays: { name: string; type: string; distance_km: number; phone: string | null; booking_url: string | null }[]
   eateries: { name: string; pure_veg: number; distance_km: number; phone: string | null }[]
   nearby: { name: string; kind: string; distance_km: number }[]
@@ -243,9 +264,7 @@ export function suggestions(els: OsmEl[], origin: [number, number], selfName: st
   const uniq = <T extends { n: string }>(xs: T[]) => xs.filter((x, i) => xs.findIndex((y) => y.n.toLowerCase() === x.n.toLowerCase()) === i)
   const t = (e: OsmEl) => e.tags
 
-  const rail = nearest(uniq(withD.filter((e) => t(e).railway === 'station' && !/^(subway|light_rail|monorail|tram)$/.test(t(e).station ?? ''))), 2)
   const bus = nearest(uniq(withD.filter((e) => t(e).amenity === 'bus_station')), 1)
-  const air = nearest(uniq(withD.filter((e) => t(e).aeroway === 'aerodrome' && t(e).iata)), 1)
   const stayType: Record<string, string> = { hostel: 'hostel', guest_house: 'homestay', apartment: 'homestay', hotel: 'hotel', motel: 'budget_hotel' }
   const stays = nearest(uniq(withD.filter((e) => stayType[t(e).tourism ?? ''])), 6)
   const eats = nearest(uniq(withD.filter((e) => /^(restaurant|cafe|fast_food)$/.test(t(e).amenity ?? ''))), 6)
@@ -255,11 +274,7 @@ export function suggestions(els: OsmEl[], origin: [number, number], selfName: st
     && !(e.d < 0.5 && (self.includes(e.n.toLowerCase()) || e.n.toLowerCase().includes(self))))), 8)
 
   return {
-    transport: [
-      ...rail.map((e) => ({ type: 'rail' as const, name: e.n, code: t(e)['railway:ref'] ?? t(e).ref ?? null, distance_km: e.d })),
-      ...bus.map((e) => ({ type: 'bus' as const, name: e.n, code: null, distance_km: e.d })),
-      ...air.map((e) => ({ type: 'air' as const, name: e.n, code: t(e).iata ?? null, distance_km: e.d })),
-    ],
+    transport: bus.map((e) => ({ type: 'bus' as const, name: e.n, code: null, distance_km: e.d })),
     stays: stays.map((e) => ({ name: e.n, type: stayType[t(e).tourism!], distance_km: e.d, phone: phoneOf(t(e)), booking_url: webOf(t(e)) })),
     eateries: eats.map((e) => ({ name: e.n, pure_veg: t(e)['diet:vegetarian'] === 'only' ? 1 : 0, distance_km: e.d, phone: phoneOf(t(e)) })),
     nearby: near.map((e) => ({

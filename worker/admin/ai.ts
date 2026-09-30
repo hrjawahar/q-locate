@@ -38,7 +38,7 @@ const SCHEMA = `Return JSON with exactly these keys:
 export async function draftWithAi(apiKey: string, model: string, facts: AiFacts): Promise<AiDraft | null> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    headers: { 'x-api-key': apiKey.trim().replace(/^["']|["']$/g, ''), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model,
       max_tokens: 900,
@@ -47,7 +47,12 @@ export async function draftWithAi(apiKey: string, model: string, facts: AiFacts)
       messages: [{ role: 'user', content: `${SCHEMA}\n\nFacts:\n${JSON.stringify(facts)}` }],
     }),
   })
-  if (!res.ok) throw new Error(`AI answered ${res.status}: ${(await res.text()).slice(0, 160)}`)
+  if (!res.ok) {
+    const t = await res.text()
+    if (res.status === 401) throw new Error('AI key rejected (401) — replace the ANTHROPIC_API_KEY secret with a fresh key')
+    if (/credit balance/i.test(t)) throw new Error('AI account has no credit — add credit at console.anthropic.com')
+    throw new Error(`AI answered ${res.status}: ${t.slice(0, 120)}`)
+  }
   const data = (await res.json()) as { content?: { type: string; text?: string }[] }
   return parseDraft(data.content?.find((c) => c.type === 'text')?.text ?? '', facts)
 }

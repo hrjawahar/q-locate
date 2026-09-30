@@ -1,6 +1,6 @@
 import { json, parseJson } from '../util'
 import type { AdminEnv, Admin } from './auth'
-import { wdPlace, wdSearch, resolveType, listByType, wikiExtract, commonsPhoto, download, overpass, suggestions, type WdPlace, type Suggestions } from './sources'
+import { wdPlace, wdSearch, resolveType, listByType, wikiExtract, commonsPhoto, download, overpass, suggestions, wdTransport, type WdPlace, type Suggestions, type Hub } from './sources'
 import { draftWithAi, type AiDraft } from './ai'
 
 type Kind = 'vacation' | 'spiritual'
@@ -172,18 +172,23 @@ export async function processNext(env: Env, max: number) {
   return done
 }
 
-interface Gathered { wd: WdPlace; sug: Suggestions | null; wiki: { text: string; url: string } | null; photo: Awaited<ReturnType<typeof commonsPhoto>>; ai: AiDraft | null; notes: string[] }
+interface Gathered { wd: WdPlace; sug: Suggestions | null; osm: boolean; wiki: { text: string; url: string } | null; photo: Awaited<ReturnType<typeof commonsPhoto>>; ai: AiDraft | null; notes: string[] }
 
 async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean): Promise<Gathered> {
   const notes: string[] = []
   const wd = await wdPlace(wikidataId)
-  const [wiki, photo, sug] = await Promise.all([
+  const hasLL = wd.lat != null && wd.lng != null
+  const [wiki, photo, sug, hubs] = await Promise.all([
     wd.wikiTitle ? wikiExtract(wd.wikiTitle) : Promise.resolve(null),
     wd.image ? commonsPhoto(wd.image).catch((e) => { notes.push(`Photo lookup failed: ${(e as Error).message.slice(0, 80)}`); return null }) : Promise.resolve((notes.push('No photo on Wikidata'), null)),
     wd.lat != null && wd.lng != null
       ? overpass(wd.lat, wd.lng).then((els) => suggestions(els, [wd.lat!, wd.lng!], wd.name)).catch((e) => { notes.push((e as Error).message.slice(0, 160)); return null })
       : Promise.resolve((notes.push('No coordinates on Wikidata, so no nearby lookups'), null)),
+    hasLL ? wdTransport(wd.lat!, wd.lng!).catch((e) => { notes.push(`Station lookup failed: ${(e as Error).message.slice(0, 80)}`); return [] as Hub[] }) : Promise.resolve([] as Hub[]),
   ])
+  // Stations and airports (Wikidata) go first; the bus stand comes from OpenStreetMap when it answered.
+  const transport = [...hubs.filter((h) => h.type === 'rail'), ...(sug?.transport ?? []), ...hubs.filter((h) => h.type === 'air')]
+  const merged: Suggestions | null = sug || hubs.length ? { transport, stays: sug?.stays ?? [], eateries: sug?.eateries ?? [], nearby: sug?.nearby ?? [] } : null
   let ai: AiDraft | null = null
   if (wantAi && !env.ANTHROPIC_API_KEY) notes.push('AI off: ANTHROPIC_API_KEY secret not set')
   if (wantAi && env.ANTHROPIC_API_KEY) {
@@ -192,7 +197,7 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
         name: wd.name, kind,
         location: [wd.city, wd.district, wd.state, wd.country].filter(Boolean).join(', '),
         description: wd.description, deity: wd.deity, wikipedia_extract: wiki?.text, wikidata_facts: wd.facts,
-        transport: sug?.transport, nearby: sug?.nearby,
+        transport: merged?.transport, nearby: merged?.nearby,
       })
     } catch (e) { notes.push(`AI draft failed: ${(e as Error).message.slice(0, 80)}`) }
   }
@@ -201,7 +206,7 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
     notes.push(got.length ? `AI: ${got.join(', ')}` : 'AI found too little in the sources')
   }
   if (!wiki) notes.push('No English Wikipedia article')
-  return { wd, sug, wiki, photo, ai, notes }
+  return { wd, sug: merged, osm: !!sug, wiki, photo, ai, notes }
 }
 
 async function storePhoto(env: Env, photo: NonNullable<Gathered['photo']>, slug: string) {
@@ -229,7 +234,7 @@ function childStatements(env: Env, placeId: number, g: Gathered, only: { transpo
   if (only.sources) {
     const src: [string, string | null, string][] = [['wikidata', `https://www.wikidata.org/wiki/${g.wd.id}`, 'Wikidata (CC0)']]
     if (g.wiki) src.push(['wikipedia', g.wiki.url, 'Wikipedia (reference)'])
-    if (g.sug) src.push(['osm', 'https://www.openstreetmap.org/copyright', '© OpenStreetMap contributors (ODbL)'])
+    if (g.osm) src.push(['osm', 'https://www.openstreetmap.org/copyright', '© OpenStreetMap contributors (ODbL)'])
     if (g.photo) src.push(['photo', g.photo.page, g.photo.credit])
     if (g.ai) src.push(['ai', null, 'Text drafted with AI from the sources above and checked by Q-Locate'])
     src.forEach(([t, u, c], i) => P('INSERT INTO place_sources (place_id, type, url, credit, sort) VALUES (?, ?, ?, ?, ?)', placeId, t, u, c, 100 + i))

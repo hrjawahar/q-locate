@@ -25,13 +25,13 @@ async function getJson<T>(url: string, init: RequestInit = {}, timeoutMs = 20000
   return res.json() as Promise<T>
 }
 
-type Binding = Record<string, { value: string } | undefined>
-export async function sparql(query: string): Promise<Binding[]> {
+export type Binding = Record<string, { value: string } | undefined>
+export async function sparql(query: string, timeoutMs = 20000): Promise<Binding[]> {
   const data = await getJson<{ results: { bindings: Binding[] } }>(WD_SPARQL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/sparql-results+json' },
     body: new URLSearchParams({ query }).toString(),
-  })
+  }, timeoutMs)
   return data.results.bindings
 }
 

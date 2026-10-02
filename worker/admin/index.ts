@@ -3,6 +3,7 @@ import { img } from '../img'
 import { AdminEnv, getAdmin, lastAuthProblem } from './auth'
 import * as api from './api'
 import * as imp from './importer'
+import * as tracker from './tracker'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
 // every /api/admin call also checks the admins table.
@@ -40,6 +41,12 @@ export default {
       if (pathname === '/api/admin/upload' && m === 'POST') return api.upload(request, env, admin)
       if (pathname === '/api/admin/places/bulk' && m === 'POST') return api.bulkStatus(await body(), env, admin)
       if (pathname === '/api/admin/wikidata/search' && m === 'GET') return imp.wikidataSearch(url)
+      if (pathname.startsWith('/api/admin/tracker')) {
+        if (admin.role === 'editor' || (admin.scope !== 'all' && admin.scope !== 'spiritual')) return json({ error: 'Not available for your role' }, { status: 403 })
+        if (pathname === '/api/admin/tracker' && m === 'GET') return tracker.get(env)
+        if (pathname === '/api/admin/tracker/refresh' && m === 'POST') return tracker.refresh(await body(), env)
+        if (pathname === '/api/admin/tracker/skip' && m === 'POST') return tracker.skip(await body(), env)
+      }
       if (pathname.startsWith('/api/admin/import/')) {
         if (admin.role === 'editor') return json({ error: 'Only a publisher or owner can import' }, { status: 403 })
         const action = pathname.slice('/api/admin/import/'.length)

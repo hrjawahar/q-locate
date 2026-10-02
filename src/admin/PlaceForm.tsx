@@ -153,7 +153,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
   }
   const enrich = async (wikidataId?: string) => {
     if (!(await save())) return
-    setBusy(true); setMsg({ text: 'Fetching from Wikidata, Wikipedia, Commons and OpenStreetMap, then drafting with AI… (up to a minute)', ok: true })
+    setBusy(true); setMsg({ text: 'Fetching from Wikidata, Wikipedia, Commons, OpenStreetMap and GeoNames, then drafting with AI… (up to a minute)', ok: true })
     try {
       const r = await api<{ filled: string[]; notes: string[] }>(`/places/${id}/enrich`, { method: 'POST', json: { wikidata_id: wikidataId } })
       await load(); setWdHits([])
@@ -411,7 +411,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
         </Section>
 
         <Section n={14} title="Sources, credits and search words">
-          <p className="m-0 text-sm text-muted">Credit the creators and sources specific to this place. Wikidata, OpenStreetMap, Wikimedia Commons, Wikipedia and AI assistance are credited once for the whole app, and the photo credit is in section 2.</p>
+          <p className="m-0 text-sm text-muted">Credit the creators and sources specific to this place. Wikidata, GeoNames, OpenStreetMap, Wikimedia Commons, Wikipedia and AI assistance are credited once for the whole app, and the photo credit is in section 2.</p>
           {(d.place.wikidata_id || d.sources.some((s) => AUTO_SOURCES.has(s.type))) && (
             <p className="m-0 text-sm">For checking: {d.place.wikidata_id && <a href={`https://www.wikidata.org/wiki/${d.place.wikidata_id}`} target="_blank" rel="noreferrer" className="mr-3">Wikidata ↗</a>}
               {d.sources.filter((s) => s.type === 'wikipedia' && s.url).map((s, i) => <a key={i} href={s.url} target="_blank" rel="noreferrer" className="mr-3">Wikipedia ↗</a>)}</p>

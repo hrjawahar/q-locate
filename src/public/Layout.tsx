@@ -31,7 +31,7 @@ export default function Layout() {
 export function Footer() {
   return (
     <footer className="px-5 py-6 text-xs text-muted leading-relaxed">
-      Information is for reference; confirm timings, prices and availability before you travel. Data from Wikidata and © OpenStreetMap contributors; photos via Wikimedia Commons where credited; some text drafted with AI and checked by Q-Locate. <a href="/about" className="text-muted">About &amp; credits</a>
+      Information is for reference; confirm timings, prices and availability before you travel. Data from Wikidata, GeoNames and © OpenStreetMap contributors; photos via Wikimedia Commons where credited; some text drafted with AI and checked by Q-Locate. <a href="/about" className="text-muted">About &amp; credits</a>
     </footer>
   )
 }

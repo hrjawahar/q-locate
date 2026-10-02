@@ -55,6 +55,7 @@ export function About() {
         <ul className="m-0 pl-5 flex flex-col gap-1">
           <li>Place data from <a href="https://www.wikidata.org/" target="_blank" rel="noreferrer">Wikidata</a> (CC0).</li>
           <li>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>, available under the Open Database License.</li>
+          <li>Place names and regions from <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0).</li>
           <li>Photos via <a href="https://commons.wikimedia.org/" target="_blank" rel="noreferrer">Wikimedia Commons</a>, credited under each photo, or by the creators named.</li>
           <li>Background reading from <a href="https://en.wikipedia.org/" target="_blank" rel="noreferrer">Wikipedia</a>.</li>
           <li>Creators whose reels and posts inspired a place are credited on that place's page.</li>

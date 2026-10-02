@@ -95,7 +95,7 @@ export default function Import({ me }: { me: Me }) {
   return (
     <section className="flex flex-col gap-5">
       <h1 className="m-0 font-display text-2xl font-bold">Import from open sources</h1>
-      <p className="m-0 text-sm text-muted">Places come from Wikidata, with photos from Wikimedia Commons and nearby stations, stays, eateries and sights from OpenStreetMap. {st?.ai ? 'AI drafts the summary, highlights, how to reach and nearby notes from those sources only.' : 'AI drafting is off (no ANTHROPIC_API_KEY set).'} Everything arrives as a <b>draft marked “needs review”</b>; nothing is published until you check it.</p>
+      <p className="m-0 text-sm text-muted">Places come from Wikidata, with photos from Wikimedia Commons and nearby stations, stays, eateries and sights from OpenStreetMap, with GeoNames filling State / District / City and any gaps. {st?.ai ? 'AI drafts the summary, highlights, how to reach and nearby notes from those sources only.' : 'AI drafting is off (no ANTHROPIC_API_KEY set).'} Everything arrives as a <b>draft marked “needs review”</b>; nothing is published until you check it.</p>
 
       {st && everything > 0 && (
         <div className="p-4 rounded-xl border border-stone-200 flex flex-col gap-2">

@@ -198,7 +198,7 @@ export async function setStatus(id: number, body: Body, env: AdminEnv, a: Admin)
     const problems = publishProblems(p, cats ?? 0)
     if (problems.length) return json({ error: `Missing before publishing: ${problems.join(', ')}` }, { status: 400 })
   }
-  await env.DB.prepare(`UPDATE places SET status = ?, ${status === 'published' ? 'needs_review = 0, ' : ''}updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(status, a.email, id).run()
+  await env.DB.prepare(`UPDATE places SET status = ?, ${status === 'published' ? "needs_review = 0, verified_on = COALESCE(verified_on, date('now')), " : ''}updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(status, a.email, id).run()
   if (status === 'published' || p.status === 'published') await bumpIndex(env)
   await audit(env, a, `status:${status}`, 'place', id)
   return json({ ok: true, status })

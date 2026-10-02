@@ -1,5 +1,6 @@
 import { json, parseJson } from '../util'
 import type { AdminEnv, Admin } from './auth'
+import { gnWhere, gnNearby } from './geonames'
 import { wdPlace, wdSearch, resolveType, listByType, wikiExtract, commonsPhoto, download, overpass, suggestions, wdTransport, type WdPlace, type Suggestions, type Hub } from './sources'
 import { draftWithAi, type AiDraft } from './ai'
 
@@ -147,7 +148,7 @@ export async function clearPending(env: AdminEnv) {
 
 // ---------------- processing ----------------
 
-type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string }
+type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; GEONAMES_USER?: string }
 interface QueueRow { id: number; wikidata_id: string; kind: Kind; category_slug: string | null; circuit_slug: string | null; circuit_position: number | null; place_id: number | null }
 
 export async function processNext(env: Env, max: number) {
@@ -190,9 +191,25 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
       : Promise.resolve((notes.push('No coordinates on Wikidata, so no nearby lookups'), null)),
     hasLL ? wdTransport(wd.lat!, wd.lng!).catch((e) => { notes.push(`Station lookup failed: ${(e as Error).message.slice(0, 80)}`); return [] as Hub[] }) : Promise.resolve([] as Hub[]),
   ])
-  // Stations and airports (Wikidata) go first; the bus stand comes from OpenStreetMap when it answered.
-  const transport = [...hubs.filter((h) => h.type === 'rail'), ...(sug?.transport ?? []), ...hubs.filter((h) => h.type === 'air')]
-  const merged: Suggestions | null = sug || hubs.length ? { transport, stays: sug?.stays ?? [], eateries: sug?.eateries ?? [], nearby: sug?.nearby ?? [] } : null
+  // GeoNames: fills State / District / City when Wikidata lacks them, and backs up empty lists.
+  const gnUser = env.GEONAMES_USER?.trim()
+  if (!gnUser) notes.push('GeoNames off: GEONAMES_USER not set')
+  const [gw, gx] = gnUser && hasLL ? await Promise.all([
+    gnWhere(wd.lat!, wd.lng!, gnUser).catch((e) => { notes.push((e as Error).message.slice(0, 120)); return null }),
+    gnNearby(wd.lat!, wd.lng!, wd.name, gnUser).catch((e) => { notes.push((e as Error).message.slice(0, 120)); return null }),
+  ]) : [null, null]
+  if (gw && (!wd.country || gw.country === wd.country || (wd.country === 'India' && gw.country === 'India'))) {
+    wd.state ??= gw.state; wd.district ??= gw.district; wd.city ??= gw.city
+  }
+  const pick = <T,>(a: T[] | undefined, b: T[] | undefined) => (a?.length ? a : b ?? [])
+  const rail = pick(hubs.filter((h) => h.type === 'rail'), gx?.rail)
+  const air = pick(hubs.filter((h) => h.type === 'air'), gx?.air)
+  // Stations and airports (Wikidata, else GeoNames); the bus stand from OpenStreetMap, else GeoNames.
+  const transport = [...rail, ...pick(sug?.transport, gx?.transport), ...air]
+  const stays = pick(sug?.stays, gx?.stays), nearby = pick(sug?.nearby, gx?.nearby)
+  const merged: Suggestions | null = transport.length || stays.length || nearby.length || sug?.eateries?.length
+    ? { transport, stays, eateries: sug?.eateries ?? [], nearby } : null
+  if (gx && (!sug?.stays?.length && gx.stays.length || !sug?.nearby?.length && gx.nearby.length)) notes.push('Some lists filled from GeoNames')
   let ai: AiDraft | null = null
   if (wantAi && !env.ANTHROPIC_API_KEY) notes.push('AI off: ANTHROPIC_API_KEY secret not set')
   if (wantAi && env.ANTHROPIC_API_KEY) {

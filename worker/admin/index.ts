@@ -6,7 +6,7 @@ import * as imp from './importer'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
 // every /api/admin call also checks the admins table.
-type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; IMPORT_BATCH?: string }
+type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; IMPORT_BATCH?: string; GEONAMES_USER?: string }
 
 export default {
   // Every minute: import a few queued places in the background (safe to close the browser).

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
+import { downloadPlacePdf } from './pdf'
 import { LogoMark } from '../components/Logo'
 import { Footer } from './Layout'
 import { CONFIG } from './config'
@@ -16,6 +17,7 @@ export default function PlacePage() {
   const [saved, setSaved] = useState(false)
   const [qr, setQr] = useState<{ maps: string; page: string } | null>(null)
   const [toast, setToast] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setP(undefined)
@@ -88,7 +90,7 @@ export default function PlacePage() {
         <a className={action} href={mapsUrl} target="_blank" rel="noreferrer"><I d="M12 21s-7-6.3-7-11.5A7 7 0 0 1 19 9.5C19 14.7 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />Directions</a>
         <button className={action} onClick={toggleSave} aria-pressed={saved}><I d="M6 3h12v18l-6-4-6 4z" />{saved ? 'Saved' : 'Save'}</button>
         <button className={action} onClick={share}><I d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13" />Share</button>
-        <button className={action} onClick={() => window.print()}><I d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" />PDF</button>
+        <button className={action} disabled={busy} onClick={async () => { setBusy(true); flash('Preparing PDF…'); try { await downloadPlacePdf(p, pageUrl, mapsUrl); flash('PDF downloaded') } catch { flash('Could not make the PDF. Try again.') } finally { setBusy(false) } }}><I d="M12 3v12M7 10l5 5 5-5M5 21h14" />{busy ? 'Wait…' : 'PDF'}</button>
         {website && <a className={action} href={website} target="_blank" rel="noreferrer"><I d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />Website</a>}
         {reel && <a className={action} href={reel.url} target="_blank" rel="noreferrer"><I d="M5 3l14 9-14 9V3z" />Watch</a>}
       </div>
@@ -189,7 +191,7 @@ export default function PlacePage() {
         </Section>
       )}
 
-      <Section><H dark={dark}>Good to know</H>
+      {(p.access_effort || (!dark && (d.best_months?.length || d.typical_visit || d.trek_grade)) || p.timings || p.entry_fee || (p.amenities ?? []).length > 0 || p.amenities_notes) && <Section><H dark={dark}>Good to know</H>
         <dl className="m-0 grid grid-cols-[8rem_1fr] gap-x-3 gap-y-2 text-[16px]">
           {p.access_effort && <><dt className="font-semibold">Access</dt><dd className="m-0">{ACCESS[p.access_effort]}{p.access_notes ? ` — ${p.access_notes}` : ''}</dd></>}
           {!dark && d.best_months?.length > 0 && <><dt className="font-semibold">Best months</dt><dd className="m-0">{d.best_months.map((m: number) => MONTHS[m - 1]).join(', ')}</dd></>}
@@ -201,7 +203,7 @@ export default function PlacePage() {
           {p.amenities_notes && <><dt className="font-semibold">Notes</dt><dd className="m-0">{p.amenities_notes}</dd></>}
         </dl>
         {!dark && d.trek_grade && <p className="m-0 mt-3 text-sm p-3 rounded-xl bg-amber-50 text-amber-900">Treks depend on weather and fitness. Check local conditions and go with a guide where advised.</p>}
-      </Section>
+      </Section>}
 
       {(p.contacts ?? []).length > 0 && (
         <Section><H dark={dark}>Contacts</H>

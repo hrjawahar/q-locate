@@ -95,7 +95,14 @@ export async function listPlaces(url: URL, env: AdminEnv, a: Admin) {
   if (status === 'imported') where.push("needs_review = 1 AND status IN ('draft','review')")
   else if (status === 'stale') where.push("status = 'published' AND (verified_on IS NULL OR verified_on < date('now','-12 months'))")
   else if (status) { where.push('status = ?'); binds.push(status) }
-  if (q) { where.push('(name LIKE ? OR alt_names LIKE ? OR state LIKE ?)'); binds.push(`%${q}%`, `%${q}%`, `%${q}%`) }
+  if (q && /^Q\d+$/i.test(q)) { where.push('wikidata_id = ?'); binds.push(q.toUpperCase()) }
+  else if (q) {
+    // Every word must appear somewhere (name, other names, town, district, state, tags), so word order and partial names still match.
+    for (const w of q.split(/\s+/).filter((x) => x.length > 1).slice(0, 6)) {
+      where.push("(name || ' ' || COALESCE(alt_names,'') || ' ' || COALESCE(city,'') || ' ' || COALESCE(district_city,'') || ' ' || COALESCE(state,'') || ' ' || COALESCE(tags,'')) LIKE ?")
+      binds.push(`%${w}%`)
+    }
+  }
   const { results } = await env.DB.prepare(
     `SELECT id, slug, kind, name, country, state, district_city, status, verified_on, updated_at, updated_by, cover_photo, needs_review, ai_pending
      FROM places ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY updated_at DESC LIMIT 500`,

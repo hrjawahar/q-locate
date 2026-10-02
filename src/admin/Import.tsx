@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { api, Me } from './api'
 
 interface Preset { id: string; label: string; kind: 'vacation' | 'spiritual'; mode: 'type' | 'names'; scope?: 'india' | 'intl'; category: string; circuit?: string; count?: number }
-interface Item { id: string; label: string; description: string; exists?: number | null; queued?: boolean; position?: number; query?: string; alternatives?: { id: string; label: string; description: string }[] }
+interface Check { ai: boolean; model: string; webSearch: boolean; geonames: string; geonamesUser: string }
+interface Item { id: string; label: string; description: string; exists?: number | null; existsStatus?: string | null; queued?: boolean; position?: number; query?: string; alternatives?: { id: string; label: string; description: string }[] }
 interface Status { counts: Record<string, number>; batch?: Record<string, number>; recent: { id: number; wikidata_id: string; label: string; status: string; error: string | null; place_id: number | null }[]; ai: boolean }
 
 const inp = 'h-11 w-full rounded-lg border border-stone-300 bg-white px-3'
@@ -25,12 +26,14 @@ export default function Import({ me }: { me: Me }) {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [st, setSt] = useState<Status | null>(null)
+  const [chk, setChk] = useState<Check | null>(null)
   const [running, setRunning] = useState(false)
   const runRef = useRef(false)
 
   useEffect(() => {
     api<{ presets: Preset[] }>('/import/presets').then((d) => setPresets(d.presets.filter((p) => me.scope === 'all' || p.kind === me.scope)))
     api<Status>('/import/status').then(setSt)
+    api<Check>('/import/check').then(setChk).catch(() => {})
     const t = setInterval(() => { if (!runRef.current) api<Status>('/import/status').then(setSt).catch(() => {}) }, 15000)
     return () => { clearInterval(t); runRef.current = false }
   }, [me.scope])
@@ -95,7 +98,14 @@ export default function Import({ me }: { me: Me }) {
   return (
     <section className="flex flex-col gap-5">
       <h1 className="m-0 font-display text-2xl font-bold">Import from open sources</h1>
-      <p className="m-0 text-sm text-muted">Places come from Wikidata, with photos from Wikimedia Commons and nearby stations, stays, eateries and sights from OpenStreetMap, with GeoNames filling State / District / City and any gaps. {st?.ai ? 'AI drafts the summary, highlights, how to reach and nearby notes from those sources only.' : 'AI drafting is off (no ANTHROPIC_API_KEY set).'} Everything arrives as a <b>draft marked “needs review”</b>; nothing is published until you check it.</p>
+      <p className="m-0 text-sm text-muted">Places come from Wikidata, with photos from Wikimedia Commons and nearby stations, stays, eateries and sights from OpenStreetMap, with GeoNames filling State / District / City and any gaps. {st?.ai ? 'AI drafts the summary, highlights, how to reach and nearby notes from those sources only.' : 'AI drafting is off (no ANTHROPIC_API_KEY set).'} Everything arrives as a <b>draft marked “needs review”</b>; nothing is published until you check it. Places already in Q-Locate are recognised and skipped automatically.</p>
+      {chk && (
+        <ul className="m-0 p-3 list-none flex flex-wrap gap-x-5 gap-y-1 rounded-xl bg-stone-100 text-sm" aria-label="Data services">
+          <li>AI: <b className={chk.ai ? 'text-green-800' : 'text-red-700'}>{chk.ai ? `on (${chk.model})` : 'off — add ANTHROPIC_API_KEY'}</b></li>
+          <li>Web research: <b>{chk.ai && chk.webSearch ? 'on' : 'off'}</b></li>
+          <li>GeoNames: <b className={chk.geonames === 'working' ? 'text-green-800' : 'text-red-700'}>{chk.geonames === 'working' ? `working (${chk.geonamesUser})` : chk.geonames === 'not set' ? 'not set — add GEONAMES_USER' : chk.geonames}</b></li>
+        </ul>
+      )}
 
       {st && everything > 0 && (
         <div className="p-4 rounded-xl border border-stone-200 flex flex-col gap-2">
@@ -170,7 +180,7 @@ export default function Import({ me }: { me: Me }) {
                   <div className="font-semibold">{it.position ? `${it.position}. ` : ''}{it.label} {it.id && <a href={`https://www.wikidata.org/wiki/${it.id}`} target="_blank" rel="noreferrer" className="font-normal text-xs">{it.id} ↗</a>}</div>
                   <div className="text-muted">{it.description || '—'}{it.query && it.query !== it.label ? ` · searched “${it.query}”` : ''}</div>
                 </div>
-                {it.exists ? <Link to={`/admin/places/${it.exists}`} className="text-xs font-semibold">Already added</Link> : it.queued ? <span className="text-xs">Queued</span> : null}
+                {it.exists ? <Link to={`/admin/places/${it.exists}`} className={`text-xs font-semibold px-2 py-1 rounded-full ${it.existsStatus === 'published' ? 'bg-green-100 text-green-900' : 'bg-stone-200'}`}>Already added · {it.existsStatus === 'published' ? 'Published' : it.existsStatus === 'archived' ? 'Archived' : 'Draft / review'}</Link> : it.queued ? <span className="text-xs">Queued</span> : null}
                 {it.alternatives && it.alternatives.length > 0 && !it.exists && (
                   <select aria-label="Pick a different match" className="h-10 rounded-lg border border-stone-300 px-2 max-w-64" value="" onChange={(e) => swap(i, e.target.value)}>
                     <option value="">Wrong match? Pick another…</option>

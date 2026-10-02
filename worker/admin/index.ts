@@ -47,6 +47,7 @@ export default {
         if (action === 'preview' && m === 'POST') return imp.preview(await body(), env)
         if (action === 'queue' && m === 'POST') return imp.enqueue(await body(), env, admin)
         if (action === 'status' && m === 'GET') return imp.status(env)
+        if (action === 'check' && m === 'GET') return imp.checkSources(env)
         if (action === 'run' && m === 'POST') { await imp.processNext(env, 1); return imp.status(env) }
         if (action === 'retry' && m === 'POST') return imp.retryErrors(env)
         if (action === 'clear' && m === 'POST') return imp.clearPending(env)

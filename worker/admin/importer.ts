@@ -54,22 +54,22 @@ export const PRESETS: Preset[] = [
 
 export const listPresets = () => json({ presets: PRESETS.map(({ ...p }) => ({ ...p, names: undefined, count: p.mode === 'names' ? p.names.length : undefined })) })
 
-interface PreviewItem { id: string; label: string; description: string; exists?: number | null; queued?: boolean; position?: number; alternatives?: { id: string; label: string; description: string }[]; query?: string }
+interface PreviewItem { id: string; label: string; description: string; exists?: number | null; existsStatus?: string | null; queued?: boolean; position?: number; alternatives?: { id: string; label: string; description: string }[]; query?: string }
 
 async function markExisting(env: AdminEnv, items: PreviewItem[]) {
   if (!items.length) return items
   const ids = items.map((i) => i.id)
-  const found = new Map<string, number>(), queued = new Set<string>()
+  const found = new Map<string, { id: number; status: string }>(), queued = new Set<string>()
   for (let i = 0; i < ids.length; i += 90) {
     const chunk = ids.slice(i, i + 90), ph = chunk.map(() => '?').join(',')
     const [p, q] = await env.DB.batch([
-      env.DB.prepare(`SELECT id, wikidata_id FROM places WHERE wikidata_id IN (${ph})`).bind(...chunk),
+      env.DB.prepare(`SELECT id, wikidata_id, status FROM places WHERE wikidata_id IN (${ph})`).bind(...chunk),
       env.DB.prepare(`SELECT wikidata_id FROM import_queue WHERE status IN ('pending','processing') AND wikidata_id IN (${ph})`).bind(...chunk),
     ])
-    for (const r of p.results as { id: number; wikidata_id: string }[]) found.set(r.wikidata_id, r.id)
+    for (const r of p.results as { id: number; wikidata_id: string; status: string }[]) found.set(r.wikidata_id, { id: r.id, status: r.status })
     for (const r of q.results as { wikidata_id: string }[]) queued.add(r.wikidata_id)
   }
-  return items.map((i) => ({ ...i, exists: found.get(i.id) ?? null, queued: queued.has(i.id) }))
+  return items.map((i) => ({ ...i, exists: found.get(i.id)?.id ?? null, existsStatus: found.get(i.id)?.status ?? null, queued: queued.has(i.id) }))
 }
 
 export async function preview(body: Record<string, unknown>, env: AdminEnv) {
@@ -135,6 +135,14 @@ export async function status(env: AdminEnv) {
   const c: Record<string, number> = { pending: 0, processing: 0, done: 0, skipped: 0, error: 0 }
   for (const r of counts.results as { status: string; n: number }[]) c[r.status] = r.n
   return json({ counts: c, batch: b, recent: recent.results, ai: !!(env as AdminEnv & { ANTHROPIC_API_KEY?: string }).ANTHROPIC_API_KEY })
+}
+
+/** One-off check of the data services, shown on the Import page. */
+export async function checkSources(env: Env) {
+  const user = env.GEONAMES_USER?.trim()
+  let geonames = 'not set'
+  if (user) geonames = await gnWhere(12.9716, 77.5946, user).then((r) => (r?.state ? 'working' : 'no answer')).catch((e) => (e as Error).message.slice(0, 120))
+  return json({ ai: !!env.ANTHROPIC_API_KEY, model: env.AI_MODEL || '', webSearch: env.AI_WEB_SEARCH !== 'off', geonames, geonamesUser: user ? `${user.slice(0, 2)}…` : '' })
 }
 
 export async function retryErrors(env: AdminEnv) {

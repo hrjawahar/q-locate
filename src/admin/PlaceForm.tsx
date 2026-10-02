@@ -235,7 +235,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
         </Section>
 
         <Section n={3} title="Summary" aside={<AiBadge field="summary" />}>
-          <Field label="One or two lines" hint="Facts, not opinions. Shown on cards and at the top of the page."><textarea className={area} maxLength={260} value={d.place.summary ?? ''} onChange={(e) => setP('summary', e.target.value)} /></Field>
+          <Field label="Two or three lines" hint="Facts, not opinions: what it is, what the visit is like, when to go. Shown at the top of the page."><textarea className={area} maxLength={420} value={d.place.summary ?? ''} onChange={(e) => setP('summary', e.target.value)} /></Field>
         </Section>
 
         <Section n={4} title="Highlights (3–5 short facts) *" aside={<AiBadge field="highlights" />}>
@@ -316,7 +316,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           <AddButton label="Add nearby place" onClick={() => setList('nearby', [...d.nearby, {}])} />
         </Section>
 
-        <Section n={10} title="Location and access">
+        <Section n={10} title="Location and access" aside={<AiBadge field="practical" />}>
           <Field label="Paste a Google Maps link or coordinates" hint="On Google Maps, long-press or right-click the spot, copy the numbers, paste here.">
             <div className="flex gap-2">
               <input className={inp} value={mapsText} onChange={(e) => setMapsText(e.target.value)} />
@@ -345,7 +345,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
         </Section>
 
         {kind === 'vacation' ? (
-          <Section n={12} title="Explore details">
+          <Section n={12} title="Explore details" aside={<AiBadge field="practical" />}>
             <div className="flex flex-col gap-1 text-sm font-semibold">Best months to visit
               <div className="flex flex-wrap gap-2">
                 {MONTHS.map((m, i) => { const on = months.includes(i + 1); return <button type="button" key={m} aria-pressed={on} onClick={() => setDet('best_months', (on ? months.filter((x) => x !== i + 1) : [...months, i + 1]).sort((a, b) => a - b).join(','))}
@@ -359,7 +359,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
             <Field label="Trek notes"><input className={inp} value={d.details.trek_notes ?? ''} onChange={(e) => setDet('trek_notes', e.target.value)} /></Field>
           </Section>
         ) : (
-          <Section n={12} title="Darshan details">
+          <Section n={12} title="Darshan details" aside={<AiBadge field="practical" />}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Main deity"><input className={inp} value={d.details.main_deity ?? ''} onChange={(e) => setDet('main_deity', e.target.value)} /></Field>
               <Field label="Tradition" hint="e.g. Shaiva, Vaishnava, Shakta, Jain, Sikh, Buddhist"><input className={inp} value={d.details.tradition ?? ''} onChange={(e) => setDet('tradition', e.target.value)} /></Field>
@@ -415,6 +415,10 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           {(d.place.wikidata_id || d.sources.some((s) => AUTO_SOURCES.has(s.type))) && (
             <p className="m-0 text-sm">For checking: {d.place.wikidata_id && <a href={`https://www.wikidata.org/wiki/${d.place.wikidata_id}`} target="_blank" rel="noreferrer" className="mr-3">Wikidata ↗</a>}
               {d.sources.filter((s) => s.type === 'wikipedia' && s.url).map((s, i) => <a key={i} href={s.url} target="_blank" rel="noreferrer" className="mr-3">Wikipedia ↗</a>)}</p>
+          )}
+          {d.sources.some((s) => s.type === 'ai' && s.url) && (
+            <div className="text-sm"><b>Pages the AI used</b> (not shown to users):
+              <ul className="m-0 mt-1 pl-5">{d.sources.filter((s) => s.type === 'ai' && s.url).map((s, i) => <li key={i}><a href={s.url} target="_blank" rel="noreferrer" className="break-all">{s.credit || s.url} ↗</a></li>)}</ul></div>
           )}
           {d.sources.map((s, i) => AUTO_SOURCES.has(s.type) ? null : (
             <RowCard key={i} onRemove={() => removeRow('sources', i)}>

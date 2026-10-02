@@ -148,7 +148,7 @@ export async function clearPending(env: AdminEnv) {
 
 // ---------------- processing ----------------
 
-type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; GEONAMES_USER?: string }
+type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; GEONAMES_USER?: string; AI_WEB_SEARCH?: string }
 interface QueueRow { id: number; wikidata_id: string; kind: Kind; category_slug: string | null; circuit_slug: string | null; circuit_position: number | null; place_id: number | null }
 
 export async function processNext(env: Env, max: number) {
@@ -164,7 +164,7 @@ export async function processNext(env: Env, max: number) {
     if (!row) break
     try {
       const r = row.place_id
-        ? await fillExisting(env, row.place_id, row.wikidata_id, 'importer').then((x) => ({ placeId: row.place_id, skipped: false, note: x.notes.join('; ') || `Refilled: ${x.filled.join(', ') || 'lists only'}` }))
+        ? await fillExisting(env, row.place_id, row.wikidata_id, 'importer', row.category_slug === REWRITE).then((x) => ({ placeId: row.place_id, skipped: false, note: x.notes.join('; ') || `Refilled: ${x.filled.join(', ') || 'lists only'}` }))
         : await importOne(env, row)
       await env.DB.prepare("UPDATE import_queue SET status = ?, place_id = ?, error = ?, finished_at = datetime('now') WHERE id = ?")
         .bind(r.skipped ? 'skipped' : 'done', r.placeId, r.note ?? null, row.id).run()
@@ -219,11 +219,12 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
         location: [wd.city, wd.district, wd.state, wd.country].filter(Boolean).join(', '),
         description: wd.description, deity: wd.deity, wikipedia_extract: wiki?.text, wikidata_facts: wd.facts,
         transport: merged?.transport, nearby: merged?.nearby,
-      })
+      }, notes, env.AI_WEB_SEARCH !== 'off')
     } catch (e) { notes.push(`AI draft failed: ${(e as Error).message.slice(0, 80)}`) }
   }
   if (ai) {
-    const got = [ai.summary && 'summary', ai.highlights && `${ai.highlights.length} highlights`, ai.how_to_reach && 'how to reach', ai.nearby?.length && 'nearby notes'].filter(Boolean)
+    const got = [ai.summary && 'summary', ai.highlights && `${ai.highlights.length} highlights`, ai.how_to_reach && 'how to reach', ai.nearby?.length && 'nearby notes',
+      ai.nearby_new?.length && `${ai.nearby_new.length} nearby places`, ai.practical && 'practical details', ai.refs?.length && `${ai.refs.length} web pages to check`].filter(Boolean)
     notes.push(got.length ? `AI: ${got.join(', ')}` : 'AI found too little in the sources')
   }
   if (!wiki) notes.push('No English Wikipedia article')
@@ -247,6 +248,8 @@ function childStatements(env: Env, placeId: number, g: Gathered, only: { transpo
   if (g.sug && only.transport) g.sug.transport.forEach((t, i) => P('INSERT INTO place_transport (place_id, type, name, code, distance_km, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.type, t.name, t.code, t.distance_km, i))
   if (g.sug && only.stays) g.sug.stays.forEach((t, i) => P('INSERT INTO place_stays (place_id, name, type, distance_km, phone, booking_url, sort) VALUES (?, ?, ?, ?, ?, ?, ?)', placeId, t.name, t.type, t.distance_km, t.phone, t.booking_url, i))
   if (g.sug && only.eateries) g.sug.eateries.forEach((t, i) => P('INSERT INTO place_eateries (place_id, name, pure_veg, distance_km, phone, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.name, t.pure_veg, t.distance_km, t.phone, i))
+  if (only.nearby && !g.sug?.nearby.length && g.ai?.nearby_new) g.ai.nearby_new.forEach((t, i) =>
+    P('INSERT INTO place_nearby (place_id, name, kind, distance_km, what_to_expect, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.name, t.kind, t.distance_km, t.what_to_expect, i))
   if (g.sug && only.nearby) g.sug.nearby.forEach((t, i) => {
     const w = g.ai?.nearby?.find((n) => n.name.toLowerCase() === t.name.toLowerCase())?.what_to_expect ?? null
     P('INSERT INTO place_nearby (place_id, name, kind, distance_km, what_to_expect, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.name, t.kind, t.distance_km, w, i)
@@ -255,13 +258,41 @@ function childStatements(env: Env, placeId: number, g: Gathered, only: { transpo
   if (only.sources) {
     // Wikidata, OpenStreetMap, Commons and AI are credited once, site-wide. Only the Wikipedia link is kept per place, to check AI drafts against.
     const src: [string, string | null, string][] = g.wiki ? [['wikipedia', g.wiki.url, 'Wikipedia (reference)']] : []
+    ;(g.ai?.refs ?? []).forEach((r) => src.push(['ai', r.url, r.title]))
     src.forEach(([t, u, c], i) => P('INSERT INTO place_sources (place_id, type, url, credit, sort) VALUES (?, ?, ?, ?, ?)', placeId, t, u, c, 100 + i))
+  }
+  return s
+}
+
+/** Practical fields (access, timings, fee, season, temple details) from the AI draft. Fills only empty ones unless overwrite is set. */
+function practicalStatements(env: Env, placeId: number, kind: Kind, g: Gathered, current: Record<string, unknown> | null, overwrite: boolean) {
+  const pr = g.ai?.practical
+  if (!pr) return []
+  const ok = (k: string, v: unknown) => v != null && v !== '' && (overwrite || current?.[k] == null || current?.[k] === '')
+  const set: Record<string, unknown> = {}
+  for (const k of ['access_effort', 'access_notes', 'timings', 'entry_fee'] as const) if (ok(k, pr[k])) set[k] = pr[k]
+  const s: D1PreparedStatement[] = []
+  const cols = Object.keys(set)
+  if (cols.length) s.push(env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).bind(...cols.map((c) => set[c]), placeId))
+  const keep = overwrite ? 'excluded.%s' : "COALESCE(NULLIF(%t.%s, ''), excluded.%s)"
+  const upd = (table: string, k: string) => `${k} = ${keep.replace(/%t/g, table).replace(/%s/g, k)}`
+  if (kind === 'vacation' && (pr.best_months?.length || pr.typical_visit)) {
+    s.push(env.DB.prepare(`INSERT INTO vacation_details (place_id, best_months, typical_visit) VALUES (?, ?, ?)
+      ON CONFLICT(place_id) DO UPDATE SET ${upd('vacation_details', 'best_months')}, ${upd('vacation_details', 'typical_visit')}`)
+      .bind(placeId, pr.best_months?.join(',') || null, pr.typical_visit ?? null))
+  }
+  if (kind === 'spiritual' && (pr.dress_code || pr.festivals || pr.significance || pr.tradition)) {
+    s.push(env.DB.prepare(`INSERT INTO temple_details (place_id, dress_code, festivals, significance, tradition) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(place_id) DO UPDATE SET ${['dress_code', 'festivals', 'significance', 'tradition'].map((k) => upd('temple_details', k)).join(', ')}`)
+      .bind(placeId, pr.dress_code ?? null, pr.festivals ?? null, pr.significance ?? null, pr.tradition ?? null))
   }
   return s
 }
 
 function aiFields(g: Gathered) {
   const f: string[] = []
+  if (g.ai?.practical) f.push('practical')
+  if (g.ai?.nearby_new?.length && !g.sug?.nearby.length) f.push('nearby')
   if (g.ai?.summary) f.push('summary')
   if (g.ai?.highlights) f.push('highlights')
   if (g.ai?.how_to_reach) f.push('how_to_reach')
@@ -308,9 +339,15 @@ async function importOne(env: Env, row: QueueRow): Promise<{ placeId: number | n
       ? env.DB.prepare('INSERT OR IGNORE INTO vacation_details (place_id) VALUES (?)').bind(placeId)
       : env.DB.prepare('INSERT OR IGNORE INTO temple_details (place_id, main_deity) VALUES (?, ?)').bind(placeId, wd.deity),
     ...childStatements(env, placeId, g, { transport: true, stays: true, eateries: true, nearby: true, sources: true, website: true }),
+    ...practicalStatements(env, placeId, row.kind, g, null, true),
     env.DB.prepare("INSERT INTO audit_log (actor, action, entity, entity_id) VALUES ('importer', 'import', 'place', ?)").bind(String(placeId)),
   ]
-  await env.DB.batch(stmts)
+  try { await env.DB.batch(stmts) } catch (e) {
+    // Don't leave a half-made place behind; the queue will retry.
+    await env.DB.prepare('DELETE FROM places WHERE id = ?').bind(placeId).run()
+    if (cover) await env.PHOTOS.delete([`${cover}-1200.webp`, `${cover}-400.webp`]).catch(() => {})
+    throw e
+  }
   await linkExtras(env, placeId, row)
   return { placeId, note: g.notes.join('; ') || undefined }
 }
@@ -329,19 +366,23 @@ export async function enrichPlace(id: number, body: Record<string, unknown>, env
 }
 
 /** Queue existing places (that have a Wikidata link) to be refilled in the background. */
+// Refill rows don't use category_slug, so it carries the "rewrite" flag.
+const REWRITE = '__rewrite__'
 export async function enqueueRefill(body: Record<string, unknown>, env: AdminEnv, a: Admin) {
   const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter((n) => n > 0).slice(0, 500) : []
+  const mode = body.rewrite === true ? REWRITE : null
   const stmts = ids.map((id) => env.DB.prepare(
-    `INSERT INTO import_queue (wikidata_id, label, kind, place_id, queued_by)
-     SELECT wikidata_id, name, kind, id, ? FROM places WHERE id = ? AND wikidata_id IS NOT NULL AND (? = 'all' OR kind = ?)
+    `INSERT INTO import_queue (wikidata_id, label, kind, place_id, category_slug, queued_by)
+     SELECT wikidata_id, name, kind, id, ?, ? FROM places WHERE id = ? AND wikidata_id IS NOT NULL AND (? = 'all' OR kind = ?)
        AND NOT EXISTS (SELECT 1 FROM import_queue q WHERE q.place_id = places.id AND q.status IN ('pending','processing'))`,
-  ).bind(a.email, id, a.scope, a.scope))
+  ).bind(mode, a.email, id, a.scope, a.scope))
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50))
   return status(env)
 }
 
-async function fillExisting(env: Env, id: number, wikidataId: string, actor: string) {
-  const p = (await env.DB.prepare('SELECT * FROM places WHERE id = ?').bind(id).first<Record<string, unknown>>())!
+async function fillExisting(env: Env, id: number, wikidataId: string, actor: string, rewrite = false) {
+  const p = await env.DB.prepare('SELECT * FROM places WHERE id = ?').bind(id).first<Record<string, unknown>>()
+  if (!p) throw new Error('This place was deleted')
   const g = await gather(env, wikidataId, p.kind as Kind, true)
   const counts = await env.DB.batch(['place_transport', 'place_stays', 'place_eateries', 'place_nearby', 'place_sources', 'place_contacts']
     .map((t) => env.DB.prepare(`SELECT count(*) AS n FROM ${t} WHERE place_id = ?`).bind(id)))
@@ -354,12 +395,16 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
   fill('state', g.wd.state); fill('district_city', g.wd.district); fill('city', g.wd.city)
   fill('lat', g.wd.lat); fill('lng', g.wd.lng)
   // Text may be replaced when empty, still an unchecked AI draft, or written by the importer and untouched since.
-  const untouched = p.updated_by === 'importer'
+  // "Rewrite with AI" treats the text as replaceable even if someone edited it; a published place goes back to review.
+  const untouched = p.updated_by === 'importer' || rewrite
+  const unpublish = rewrite && p.status === 'published' && !!g.ai
   const replaceable = (k: string, empty: boolean) => empty || pending.has(k) || untouched
   if (g.ai?.summary && replaceable('summary', !p.summary)) { set.summary = g.ai.summary; pending.add('summary') }
   if (g.ai?.highlights && replaceable('highlights', !hasHl)) { set.highlights = JSON.stringify(g.ai.highlights); pending.add('highlights') }
   if (g.ai?.how_to_reach && replaceable('how_to_reach', !p.how_to_reach)) { set.how_to_reach = g.ai.how_to_reach; pending.add('how_to_reach') }
-  if (g.ai?.nearby?.length) pending.add('nearby')
+  if (g.ai?.nearby?.length || (empty[3] && g.ai?.nearby_new?.length && !g.sug?.nearby.length)) pending.add('nearby')
+  const practicalOverwrite = untouched || pending.has('practical')
+  if (g.ai?.practical) pending.add('practical')
   const nearbyNotes = empty[3] ? [] : (g.ai?.nearby ?? []).map((n) => env.DB.prepare(
     "UPDATE place_nearby SET what_to_expect = ? WHERE place_id = ? AND lower(name) = lower(?) AND (what_to_expect IS NULL OR what_to_expect = '')").bind(n.what_to_expect, id, n.name))
   if (!p.cover_photo && g.photo) {
@@ -367,15 +412,26 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
     if (key) { set.cover_photo = key; set.cover_credit = g.photo.credit }
   }
   set.ai_pending = JSON.stringify([...pending])
+  if (unpublish) { set.status = 'review'; set.needs_review = 1 }
   const cols = Object.keys(set)
   await env.DB.batch([
     env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(...cols.map((c) => set[c]), actor, id),
     ...nearbyNotes,
     ...(p.kind === 'spiritual' && g.wd.deity ? [env.DB.prepare("INSERT INTO temple_details (place_id, main_deity) VALUES (?, ?) ON CONFLICT(place_id) DO UPDATE SET main_deity = COALESCE(NULLIF(temple_details.main_deity, ''), excluded.main_deity)").bind(id, g.wd.deity)] : []),
-    ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: !(await hasAutoSources(env, id)), website: empty[5] }),
+    ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: false, website: empty[5] }),
+    ...(await hasAutoSources(env, id) ? [] : childStatements(env, id, { ...g, ai: null }, { transport: false, stays: false, eateries: false, nearby: false, sources: true, website: false })),
+    ...(g.ai?.refs?.length ? [env.DB.prepare("DELETE FROM place_sources WHERE place_id = ? AND type = 'ai'").bind(id),
+      ...g.ai.refs.map((r, i) => env.DB.prepare("INSERT INTO place_sources (place_id, type, url, credit, sort) VALUES (?, 'ai', ?, ?, ?)").bind(id, r.url, r.title, 120 + i))] : []),
+    ...practicalStatements(env, id, p.kind as Kind, g, { ...p, ...(await currentDetails(env, id, p.kind as Kind)) }, practicalOverwrite),
     env.DB.prepare("INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'enrich', 'place', ?)").bind(actor, String(id)),
+    ...(unpublish ? [env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'index_version'")] : []),
   ])
-  return { filled: cols.filter((c) => c !== 'ai_pending' && c !== 'wikidata_id'), notes: g.notes }
+  if (unpublish) g.notes.push('Moved to In review until you check the AI drafts')
+  return { filled: cols.filter((c) => !['ai_pending', 'wikidata_id', 'status', 'needs_review'].includes(c)), notes: g.notes }
+}
+
+async function currentDetails(env: Env, id: number, kind: Kind) {
+  return (await env.DB.prepare(`SELECT * FROM ${kind === 'vacation' ? 'vacation_details' : 'temple_details'} WHERE place_id = ?`).bind(id).first<Record<string, unknown>>()) ?? {}
 }
 
 async function hasAutoSources(env: Env, id: number) {

@@ -61,6 +61,11 @@ export default function PlacesList({ me }: { me: Me }) {
             const s = await api<{ counts: Record<string, number> }>('/import/refill', { method: 'POST', json: { ids: [...sel] } })
             setMsg(`Queued to refill empty fields from open sources (only places linked to Wikidata). ${s.counts.pending} waiting — see the Import page.`)
           }}>Refill from sources</button>
+          <button className="h-10 px-3 rounded-lg border border-stone-300 bg-white font-semibold" onClick={async () => {
+            if (!confirm('Rewrite the summary, highlights, how to reach and practical details with AI web research?\n\nThis replaces the current text. Published places go back to "In review" until you check them.')) return
+            const s = await api<{ counts: Record<string, number> }>('/import/refill', { method: 'POST', json: { ids: [...sel], rewrite: true } })
+            setMsg(`Queued for AI rewrite. ${s.counts.pending} waiting — see the Import page.`)
+          }}>Rewrite with AI</button>
           <span className="text-muted">Only places with every required field and checked AI drafts will publish.</span>
         </div>
       )}

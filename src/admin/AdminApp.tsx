@@ -8,6 +8,7 @@ import Users from './Users'
 import Activity from './Activity'
 import Import from './Import'
 import Tracker from './Tracker'
+import { MoviesList, MovieForm } from './Movies'
 
 export default function AdminApp() {
   const [me, setMe] = useState<Me | null>(null)
@@ -50,6 +51,7 @@ export default function AdminApp() {
             <NavLink to="/admin" end className={link}>Places</NavLink>
             {me.role !== 'editor' && <NavLink to="/admin/import" className={link}>Import</NavLink>}
             {me.role !== 'editor' && (me.scope === 'all' || me.scope === 'spiritual') && <NavLink to="/admin/tracker" className={link}>Temple tracker</NavLink>}
+            {me.scope === 'all' && <NavLink to="/admin/movies" className={link}>Reel Picks</NavLink>}
             {me.role !== 'editor' && <NavLink to="/admin/activity" className={link}>Activity</NavLink>}
             {me.role === 'owner' && <NavLink to="/admin/users" className={link}>Admins</NavLink>}
           </nav>
@@ -64,6 +66,8 @@ export default function AdminApp() {
           {me.role !== 'editor' && <Route path="activity" element={<Activity />} />}
           {me.role !== 'editor' && <Route path="import" element={<Import me={me} />} />}
           {me.role !== 'editor' && <Route path="tracker" element={<Tracker />} />}
+          {me.scope === 'all' && <Route path="movies" element={<MoviesList me={me} />} />}
+          {me.scope === 'all' && <Route path="movies/:id" element={<MovieForm me={me} />} />}
           {me.role === 'owner' && <Route path="users" element={<Users me={me} />} />}
         </Routes>
       </div>

@@ -87,3 +87,18 @@ export const fmtTime = (t: string) => {
   const [h, m] = t.split(':').map(Number)
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
 }
+
+// ---------- Reel Picks (movies) ----------
+export interface Movie {
+  slug: string; title: string; year: number | null; country: string | null; language: string | null; subtitles: string | null
+  genres: string[]; doc_topic: string | null; runtime_min: number | null; pitch: string | null; family_friendly: boolean | null
+  published_at: string | null; recs: { handle: string | null; url: string | null }[]
+}
+let moviesPromise: Promise<Movie[]> | null = null
+export function loadMovies(): Promise<Movie[]> {
+  moviesPromise ??= getJson<{ movies: Movie[] }>('/api/movies.json')
+    .then(async (d) => { await set('movies', d.movies).catch(() => {}); return d.movies })
+    .catch(async () => ((await get('movies').catch(() => null)) as Movie[] | undefined) ?? [])
+  return moviesPromise
+}
+export const runtime = (m: number | null) => (m ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : '')

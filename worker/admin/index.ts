@@ -4,6 +4,7 @@ import { AdminEnv, getAdmin, lastAuthProblem } from './auth'
 import * as api from './api'
 import * as imp from './importer'
 import * as tracker from './tracker'
+import * as movies from './movies'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
 // every /api/admin call also checks the admins table.
@@ -41,6 +42,18 @@ export default {
       if (pathname === '/api/admin/upload' && m === 'POST') return api.upload(request, env, admin)
       if (pathname === '/api/admin/places/bulk' && m === 'POST') return api.bulkStatus(await body(), env, admin)
       if (pathname === '/api/admin/wikidata/search' && m === 'GET') return imp.wikidataSearch(url)
+      if (pathname.startsWith('/api/admin/movies')) {
+        if (admin.scope !== 'all') return json({ error: 'Reel Picks needs an admin with access to all sections' }, { status: 403 })
+        const mm = pathname.match(/^\/api\/admin\/movies\/(\d+)(\/(status|recs))?$/)
+        if (pathname === '/api/admin/movies' && m === 'GET') return movies.list(url, env)
+        if (pathname === '/api/admin/movies' && m === 'POST') return movies.save(null, await body(), env, admin)
+        if (pathname === '/api/admin/movies/fill' && m === 'POST') return movies.fill(await body(), env)
+        if (mm && !mm[2] && m === 'GET') return movies.get(Number(mm[1]), env)
+        if (mm && !mm[2] && m === 'PUT') return movies.save(Number(mm[1]), await body(), env, admin)
+        if (mm && !mm[2] && m === 'DELETE') return movies.remove(Number(mm[1]), env, admin)
+        if (mm && mm[3] === 'status' && m === 'POST') return movies.setStatus(Number(mm[1]), await body(), env, admin)
+        if (mm && mm[3] === 'recs' && m === 'POST') return movies.addRec(Number(mm[1]), await body(), env, admin)
+      }
       if (pathname.startsWith('/api/admin/tracker')) {
         if (admin.role === 'editor' || (admin.scope !== 'all' && admin.scope !== 'spiritual')) return json({ error: 'Not available for your role' }, { status: 403 })
         if (pathname === '/api/admin/tracker' && m === 'GET') return tracker.get(env)

@@ -3,6 +3,7 @@ import { indexJson } from './index-json'
 import { place } from './place'
 import { search } from './search'
 import { img } from './img'
+import { moviesJson } from './movies'
 
 // Entry point: /api/* and /img/* run here; everything else is the React app (dist/).
 export default {
@@ -13,6 +14,7 @@ export default {
       if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, { status: 405 })
       if (pathname === '/api/index.json') return indexJson(request, env, ctx)
       if (pathname === '/api/search') return search(request, env)
+      if (pathname === '/api/movies.json') return moviesJson(env)
       if (pathname === '/api/meta') {
         const [c, ci] = await env.DB.batch([
           env.DB.prepare('SELECT kind, slug, name FROM categories ORDER BY kind, sort'),

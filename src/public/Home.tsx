@@ -58,6 +58,11 @@ export default function Home() {
         <span className="text-[15px]">Temples, timings, sacred circuits</span>
       </Link>
 
+      <Link to="/movies" className="flex items-center gap-4 p-4 bg-ink text-white rounded-2xl no-underline">
+        <span className="w-11 h-11 shrink-0 rounded-xl bg-white/10 grid place-items-center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F2B35C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16v14H4zM4 9h16M8 5l2 4M13 5l2 4M10 12.5v4l3.5-2z" /></svg></span>
+        <span className="flex-1"><span className="block font-bold">Reel Picks</span><span className="block text-sm text-white/75">Not sure what to watch this weekend?</span></span>
+        <span aria-hidden="true" className="text-2xl">›</span>
+      </Link>
       <Link to="/community" className="flex items-center gap-4 p-4 bg-white border border-dashed border-stone-300 rounded-2xl no-underline text-ink">
         <span className="w-11 h-11 shrink-0 rounded-xl bg-[#FBE7CC] grid place-items-center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9A560B" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M9 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M17 11.5a2.5 2.5 0 1 0 0-5M16 14.2c3.1.2 5.5 2.4 5.5 5.8" /></svg></span>
         <span className="flex-1"><span className="flex items-center gap-2 font-bold">Q-Locate Community {!CONFIG.whatsappChannel && <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A4C08] bg-[#FBE7CC] px-2 py-0.5 rounded-full">Soon</span>}</span>

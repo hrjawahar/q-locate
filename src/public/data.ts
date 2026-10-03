@@ -88,7 +88,7 @@ export const fmtTime = (t: string) => {
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
 }
 
-// ---------- Reel Picks (movies) ----------
+// ---------- Movie Picks (movies) ----------
 export interface Movie {
   slug: string; title: string; year: number | null; country: string | null; language: string | null; subtitles: string | null
   genres: string[]; doc_topic: string | null; runtime_min: number | null; pitch: string | null; family_friendly: boolean | null

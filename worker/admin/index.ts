@@ -43,7 +43,7 @@ export default {
       if (pathname === '/api/admin/places/bulk' && m === 'POST') return api.bulkStatus(await body(), env, admin)
       if (pathname === '/api/admin/wikidata/search' && m === 'GET') return imp.wikidataSearch(url)
       if (pathname.startsWith('/api/admin/movies')) {
-        if (admin.scope !== 'all') return json({ error: 'Reel Picks needs an admin with access to all sections' }, { status: 403 })
+        if (admin.scope !== 'all') return json({ error: 'Movie Picks needs an admin with access to all sections' }, { status: 403 })
         const mm = pathname.match(/^\/api\/admin\/movies\/(\d+)(\/(status|recs))?$/)
         if (pathname === '/api/admin/movies' && m === 'GET') return movies.list(url, env)
         if (pathname === '/api/admin/movies' && m === 'POST') return movies.save(null, await body(), env, admin)

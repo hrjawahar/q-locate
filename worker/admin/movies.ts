@@ -1,4 +1,4 @@
-// Reel Picks: a small, reviewed weekend watch list. Facts from Wikidata (CC0) when it knows the film,
+// Movie Picks: a small, reviewed weekend watch list. Facts from Wikidata (CC0) when it knows the film,
 // the rest drafted by AI (with web research) and checked by an admin before publishing.
 import { json, parseJson } from '../util'
 import { type AdminEnv, type Admin, canPublish } from './auth'
@@ -53,7 +53,7 @@ export async function save(id: number | null, body: Record<string, unknown>, env
   }
   if (v.wikidata_id) {
     const clash = await env.DB.prepare('SELECT id FROM movies WHERE wikidata_id = ? AND id != ?').bind(v.wikidata_id, id ?? 0).first<number>('id')
-    if (clash) return json({ error: `Already in Reel Picks (movie #${clash}) — add the recommendation there`, existing: clash }, { status: 409 })
+    if (clash) return json({ error: `Already in Movie Picks (movie #${clash}) — add the recommendation there`, existing: clash }, { status: 409 })
   }
   let movieId = id
   if (!movieId) {
@@ -137,7 +137,7 @@ async function wdFilm(title: string, year: number | null) {
   }
 }
 
-const SYSTEM = `You fill short catalogue entries for "Reel Picks", a list of reviewed movies people can pick from for the weekend.
+const SYSTEM = `You fill short catalogue entries for "Movie Picks", a list of reviewed movies people can pick from for the weekend.
 Rules:
 - Use the facts given and, if a web_search tool is available, 1-3 searches on reliable film sites (Wikipedia, official studio/distributor pages, established film databases and newspapers).
 - Never invent. If unsure of a field, leave it empty.

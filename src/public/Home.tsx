@@ -60,7 +60,7 @@ export default function Home() {
 
       <Link to="/movies" className="flex items-center gap-4 p-4 bg-ink text-white rounded-2xl no-underline">
         <span className="w-11 h-11 shrink-0 rounded-xl bg-white/10 grid place-items-center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F2B35C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16v14H4zM4 9h16M8 5l2 4M13 5l2 4M10 12.5v4l3.5-2z" /></svg></span>
-        <span className="flex-1"><span className="block font-bold">Reel Picks</span><span className="block text-sm text-white/75">Not sure what to watch this weekend?</span></span>
+        <span className="flex-1"><span className="block font-bold">Movie Picks</span><span className="block text-sm text-white/75">English movies for your weekend</span></span>
         <span aria-hidden="true" className="text-2xl">›</span>
       </Link>
       <Link to="/community" className="flex items-center gap-4 p-4 bg-white border border-dashed border-stone-300 rounded-2xl no-underline text-ink">

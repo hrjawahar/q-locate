@@ -40,7 +40,7 @@ export function MoviesList({ me }: { me: Me }) {
     setBusy('Looking it up and drafting with AI… (up to a minute)'); setMsg('')
     try {
       const r = await addOne(form.title.trim(), form.year, { handle: form.handle, url: form.url, note: form.note })
-      if (r.existed) { setMsg('Already in Reel Picks — this reviewer was added to it.'); load() }
+      if (r.existed) { setMsg('Already in Movie Picks — this reviewer was added to it.'); load() }
       else nav(`/admin/movies/${r.id}`)
       setForm({ title: '', year: '', handle: '', url: '', note: '' })
     } catch (e) { setMsg((e as Error).message) }
@@ -60,8 +60,8 @@ export function MoviesList({ me }: { me: Me }) {
 
   return (
     <section className="flex flex-col gap-5">
-      <h1 className="m-0 font-display text-2xl font-bold">Reel Picks</h1>
-      <p className="m-0 text-sm text-muted">A short, reviewed list of movies users can pick from for the weekend. Paste the reel you saw; Wikidata and AI fill the details as a draft for you to check. Reviewers are always credited.</p>
+      <h1 className="m-0 font-display text-2xl font-bold">Movie Picks</h1>
+      <p className="m-0 text-sm text-muted">A short, reviewed list of English movies (or films with English subtitles) users can pick from for the weekend. Paste the reel you saw; Wikidata and AI fill the details as a draft for you to check. Reviewers are always credited.</p>
 
       <div className="p-4 rounded-xl border border-stone-200 flex flex-col gap-3">
         <h2 className="m-0 text-lg font-semibold">Add from a reel</h2>
@@ -137,7 +137,7 @@ export function MovieForm({ me }: { me: Me }) {
     try {
       await api(`/movies/${id}`, { method: 'PUT', json: { movie: m, recs } })
       await api(`/movies/${id}/status`, { method: 'POST', json: { status: s } })
-      setM({ ...m, status: s }); setMsg({ text: s === 'published' ? 'Published — it’s live in Reel Picks' : 'Updated', ok: true })
+      setM({ ...m, status: s }); setMsg({ text: s === 'published' ? 'Published — it’s live in Movie Picks' : 'Updated', ok: true })
     } catch (e) { setMsg({ text: (e as Error).message }) }
     setBusy(false)
   }
@@ -146,7 +146,7 @@ export function MovieForm({ me }: { me: Me }) {
 
   return (
     <section className="flex flex-col gap-5 max-w-3xl">
-      <Link to="/admin/movies" className="text-sm">← Reel Picks</Link>
+      <Link to="/admin/movies" className="text-sm">← Movie Picks</Link>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="m-0 font-display text-2xl font-bold flex-1">{m.title || 'Movie'}</h1>
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${ST[m.status ?? 'draft'][1]}`}>{ST[m.status ?? 'draft'][0]}</span>

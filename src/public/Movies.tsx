@@ -15,7 +15,7 @@ export default function Movies() {
   const [genre, setGenre] = useState(''), [topic, setTopic] = useState(''), [lang, setLang] = useState(''), [country, setCountry] = useState('')
   const [len, setLen] = useState(''), [family, setFamily] = useState(false)
   const [pick, setPick] = useState<string | null>(null)
-  useEffect(() => { loadMovies().then(setAll); document.title = 'Reel Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
+  useEffect(() => { loadMovies().then(setAll); document.title = 'Movie Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const ms = useMemo(() => {
     const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch'], storeFields: ['slug'],
@@ -49,8 +49,9 @@ export default function Movies() {
       <header className="px-5 flex items-center gap-3">
         <Link to="/" aria-label="Back to home" className="w-11 h-11 -ml-2 grid place-items-center rounded-full text-ink no-underline text-2xl">‹</Link>
         <div>
-          <h1 className="m-0 font-display text-3xl font-bold tracking-tight">Reel Picks</h1>
-          <p className="m-0 text-sm text-muted">Movies reviewers loved — pick one for the weekend</p>
+          <h1 className="m-0 font-display text-3xl font-bold tracking-tight">Movie Picks</h1>
+          <p className="m-0 text-sm text-muted">English movies reviewers loved — pick one for the weekend</p>
+          <p className="m-0 mt-1 text-xs font-semibold text-forest">English only: films in English, or world cinema with English subtitles</p>
         </div>
       </header>
 
@@ -75,7 +76,7 @@ export default function Movies() {
       )}
 
       <div className="px-5 grid grid-cols-2 gap-2">
-        <select aria-label="Language" className={sel} value={lang} onChange={(e) => setLang(e.target.value)}><option value="">Any language</option><option value="en">English</option><option value="subs">With English subtitles</option></select>
+        <select aria-label="Language" className={sel} value={lang} onChange={(e) => setLang(e.target.value)}><option value="">Any language</option><option value="en">In English</option><option value="subs">With English subtitles</option></select>
         <select aria-label="Country" className={sel} value={country} onChange={(e) => setCountry(e.target.value)}><option value="">Any country</option>{countries.map((c) => <option key={c}>{c}</option>)}</select>
         <select aria-label="Length" className={sel} value={len} onChange={(e) => setLen(e.target.value)}><option value="">Any length</option>{LENGTHS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <label className="h-11 flex items-center gap-2 px-3 rounded-xl border border-stone-300 bg-white text-[15px]"><input type="checkbox" className="w-5 h-5" checked={family} onChange={(e) => setFamily(e.target.checked)} />Family friendly</label>
@@ -85,7 +86,7 @@ export default function Movies() {
         {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setGenre(''); setTopic(''); setLang(''); setCountry(''); setLen(''); setFamily(false) }}>Clear</button>}</p>
 
       {all !== null && shown.length === 0 && (
-        <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">{all.length ? 'Nothing matches.' : 'Reel Picks are coming soon.'}</p>
+        <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">{all.length ? 'Nothing matches.' : 'Movie Picks are coming soon.'}</p>
           {all.length > 0 && <p className="m-0 mt-1 text-sm text-muted">Try fewer filters.</p>}</div>
       )}
 

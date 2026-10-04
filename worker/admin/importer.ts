@@ -142,7 +142,10 @@ export async function checkSources(env: Env) {
   const user = env.GEONAMES_USER?.trim()
   let geonames = 'not set'
   if (user) geonames = await gnWhere(12.9716, 77.5946, user).then((r) => (r?.state ? 'working' : 'no answer')).catch((e) => (e as Error).message.slice(0, 120))
-  return json({ ai: !!env.ANTHROPIC_API_KEY, model: env.AI_MODEL || '', webSearch: env.AI_WEB_SEARCH !== 'off', geonames, geonamesUser: user ? `${user.slice(0, 2)}…` : '' })
+  const e = env as Env & { AI?: unknown; VEC?: VectorizeIndex }
+  const info = e.VEC ? await e.VEC.describe().catch(() => null) as { vectorsCount?: number; vectorCount?: number } | null : null
+  const smart = !e.AI || !e.VEC ? 'not connected' : info ? `on (${info.vectorsCount ?? info.vectorCount ?? 0} items indexed)` : 'index not found — create q-locate-search'
+  return json({ ai: !!env.ANTHROPIC_API_KEY, model: env.AI_MODEL || '', webSearch: env.AI_WEB_SEARCH !== 'off', geonames, geonamesUser: user ? `${user.slice(0, 2)}…` : '', smart })
 }
 
 export async function retryErrors(env: AdminEnv) {

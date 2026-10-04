@@ -6,6 +6,7 @@ import * as imp from './importer'
 import * as tracker from './tracker'
 import * as movies from './movies'
 import * as books from './books'
+import * as vectors from './vectors'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
 // every /api/admin call also checks the admins table.
@@ -15,6 +16,8 @@ export default {
   // Every minute: import a few queued places in the background (safe to close the browser).
   async scheduled(_event, env, ctx) {
     ctx.waitUntil(imp.processNext(env, Math.max(1, Number(env.IMPORT_BATCH) || 2)))
+    // Keep meaning-search fingerprints in step with what is published.
+    ctx.waitUntil(vectors.sync(env).catch((e) => console.log('vector sync', (e as Error).message)))
   },
 
   async fetch(request, env, ctx) {
@@ -43,6 +46,9 @@ export default {
       if (pathname === '/api/admin/upload' && m === 'POST') return api.upload(request, env, admin)
       if (pathname === '/api/admin/places/bulk' && m === 'POST') return api.bulkStatus(await body(), env, admin)
       if (pathname === '/api/admin/wikidata/search' && m === 'GET') return imp.wikidataSearch(url)
+      if (pathname === '/api/admin/search/status' && m === 'GET') return vectors.status(env)
+      if (pathname === '/api/admin/search/rebuild' && m === 'POST' && admin.role === 'owner') return vectors.rebuild(env)
+      if (pathname === '/api/admin/search/sync' && m === 'POST' && admin.role !== 'editor') return json({ done: await vectors.sync(env) })
       if (pathname.startsWith('/api/admin/books')) {
         if (admin.scope !== 'all') return json({ error: 'Book Picks needs an admin with access to all sections' }, { status: 403 })
         const bm = pathname.match(/^\/api\/admin\/books\/(\d+)(\/(status|recs))?$/)

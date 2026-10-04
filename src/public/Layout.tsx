@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useOnline } from './useSemantic'
 
 const Icon = ({ d }: { d: string }) => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
@@ -13,8 +14,14 @@ const tabs = [
 
 export default function Layout() {
   const { pathname } = useLocation()
+  const online = useOnline()
   return (
     <div className="min-h-full flex flex-col bg-sand">
+      {!online && (
+        <div role="status" className="no-print sticky top-0 z-30 px-4 py-2 bg-ink text-white text-sm text-center">
+          You’re offline. Saved places still open; smart search and the latest updates return when you reconnect.
+        </div>
+      )}
       <div className="flex-1 w-full max-w-2xl mx-auto pb-24"><Outlet /></div>
       <nav aria-label="Main" className="no-print fixed bottom-0 inset-x-0 z-20 bg-white border-t border-stone-200 pb-[env(safe-area-inset-bottom)]">
         <div className="max-w-2xl mx-auto flex justify-around">
@@ -33,7 +40,7 @@ export default function Layout() {
 export function Footer() {
   return (
     <footer className="px-5 py-6 text-xs text-muted leading-relaxed">
-      Information is for reference; confirm timings, prices and availability before you travel. Data from Wikidata, GeoNames and © OpenStreetMap contributors; photos via Wikimedia Commons where credited; some text drafted with AI and checked by Q-Locate. <a href="/about" className="text-muted">About &amp; credits</a>
+      Information is for reference; confirm timings, prices and availability before you travel. Data from Wikidata, GeoNames and © OpenStreetMap contributors; photos via Wikimedia Commons where credited; some text drafted with AI and checked by Q-Locate. Works best when you’re connected to the internet. <a href="/about" className="text-muted">About &amp; credits</a>
     </footer>
   )
 }

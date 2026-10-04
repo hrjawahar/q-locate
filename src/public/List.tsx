@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Footer } from './Layout'
 import { snippet } from './searchkit'
+import { useSemantic } from './useSemantic'
 import { loadIndex, loadMeta, makeSearch, openNow, placeUrl, where, MONTHS, ACCESS, VISIT, type IndexPlace, type Kind, type Meta } from './data'
 
 const selectCls = 'h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-[15px]'
@@ -37,6 +38,13 @@ export default function List({ kind }: { kind: Kind }) {
       && (!deity || p.deity === deity) && (!circuit || p.circuits.includes(circuit)))
   }, [mine, search, q, cat, region, month, visit, access, deity, circuit, scope])
   const activeFilters = [region, month, visit, access, deity, circuit].filter(Boolean).length
+  // Closest matches by meaning (online), limited to this section and not already listed above.
+  const sem = useSemantic(q)
+  const closest = useMemo(() => {
+    const listed = new Set(shown.map((p) => p.slug))
+    const bySlug = new Map(mine.map((p) => [p.slug, p]))
+    return sem.filter((h) => h.type === 'place' && !listed.has(h.slug)).map((h) => bySlug.get(h.slug)).filter((p): p is IndexPlace => !!p).slice(0, 6)
+  }, [sem, shown, mine])
 
   const chip = (on: boolean) => `shrink-0 h-10 px-4 rounded-full border text-sm font-semibold ${on
     ? (dark ? 'bg-maroon text-white border-maroon' : 'bg-forest text-white border-forest')
@@ -90,7 +98,7 @@ export default function List({ kind }: { kind: Kind }) {
 
       <p className="m-0 px-5 text-sm text-muted" role="status">{all === null ? 'Loading…' : `${shown.length} ${shown.length === 1 ? 'place' : 'places'}`}</p>
 
-      {all !== null && shown.length === 0 && (
+      {all !== null && shown.length === 0 && closest.length === 0 && (
         <div className="mx-5 p-5 rounded-2xl bg-white text-center">
           <p className="m-0 font-semibold">Nothing matches yet.</p>
           <p className="m-0 mt-1 text-sm text-muted">{mine.length ? 'Try another spelling, or clear a filter.' : 'Places for this section are being added. Check back soon.'}</p>
@@ -125,6 +133,20 @@ export default function List({ kind }: { kind: Kind }) {
             </Link></li>
           ))}
         </ul>
+      )}
+      {closest.length > 0 && (
+        <section className="px-5 flex flex-col gap-2" aria-label="Closest matches">
+          <h2 className="m-0 text-sm font-bold uppercase tracking-wider text-muted">Closest matches</h2>
+          <ul className="list-none m-0 p-0 flex flex-col gap-2">
+            {closest.map((p) => (
+              <li key={p.slug}><Link to={placeUrl(p)} className="flex items-center gap-3 p-3 bg-white rounded-2xl no-underline text-ink">
+                <div className={`w-14 h-14 shrink-0 rounded-xl overflow-hidden ${dark ? 'bg-[#F3E3CC]' : 'bg-[#DDE8DD]'}`}>{p.thumb && <img src={p.thumb} alt="" loading="lazy" className="w-full h-full object-cover" />}</div>
+                <div className="flex-1 min-w-0"><div className={`font-semibold leading-snug ${dark ? 'font-serif text-maroon' : 'font-display'}`}>{p.name}</div><div className="text-sm text-muted truncate">{where(p)}</div>
+                  {p.summary && <div className="text-xs mt-0.5 line-clamp-2">{p.summary}</div>}</div>
+              </Link></li>
+            ))}
+          </ul>
+        </section>
       )}
       <Footer />
     </main>

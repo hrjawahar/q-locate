@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, Me } from './api'
 
 interface Preset { id: string; label: string; kind: 'vacation' | 'spiritual'; mode: 'type' | 'names'; scope?: 'india' | 'intl'; category: string; circuit?: string; count?: number }
-interface Check { ai: boolean; model: string; webSearch: boolean; geonames: string; geonamesUser: string }
+interface Check { ai: boolean; model: string; webSearch: boolean; geonames: string; geonamesUser: string; smart?: string }
 interface Item { id: string; label: string; description: string; exists?: number | null; existsStatus?: string | null; queued?: boolean; position?: number; query?: string; alternatives?: { id: string; label: string; description: string }[] }
 interface Status { counts: Record<string, number>; batch?: Record<string, number>; recent: { id: number; wikidata_id: string; label: string; status: string; error: string | null; place_id: number | null }[]; ai: boolean }
 
@@ -103,6 +103,7 @@ export default function Import({ me }: { me: Me }) {
         <ul className="m-0 p-3 list-none flex flex-wrap gap-x-5 gap-y-1 rounded-xl bg-stone-100 text-sm" aria-label="Data services">
           <li>AI: <b className={chk.ai ? 'text-green-800' : 'text-red-700'}>{chk.ai ? `on (${chk.model})` : 'off — add ANTHROPIC_API_KEY'}</b></li>
           <li>Web research: <b>{chk.ai && chk.webSearch ? 'on' : 'off'}</b></li>
+          <li>Smart search: <b className={chk.smart?.startsWith('on') ? 'text-green-800' : 'text-red-700'}>{chk.smart ?? 'not connected'}</b></li>
           <li>GeoNames: <b className={chk.geonames === 'working' ? 'text-green-800' : 'text-red-700'}>{chk.geonames === 'working' ? `working (${chk.geonamesUser})` : chk.geonames === 'not set' ? 'not set — add GEONAMES_USER' : chk.geonames}</b></li>
         </ul>
       )}

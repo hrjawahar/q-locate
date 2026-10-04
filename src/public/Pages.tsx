@@ -61,6 +61,9 @@ export function About() {
           <li>Creators whose reels and posts inspired a place are credited on that place's page.</li>
         </ul>
       </section>
+      <section><h2 className="m-0 mb-2 font-display text-xl font-semibold">Best when you’re online</h2>
+        <p className="m-0">Q-Locate works best with an internet connection. Online, you get smart search — results that match what you mean, not just the exact words you type — along with the latest timings and updates. Offline, places you’ve saved still open in full and search matches exact words only.</p>
+      </section>
       <section><h2 className="m-0 mb-2 font-display text-xl font-semibold">Privacy</h2>
         <p className="m-0">Q-Locate has no accounts. Places you save are stored only on your device. We use privacy-friendly, cookie-free visitor counts.</p>
       </section>

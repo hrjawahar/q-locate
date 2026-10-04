@@ -6,6 +6,7 @@ import MiniSearch from 'minisearch'
 import { loadIndex, loadMovies, loadBooks, makeSearch, savedPlaces, placeUrl, where, type IndexPlace, type Place, type Movie, type Book } from './data'
 import { CONFIG } from './config'
 import { snippet, processTerm, expand } from './searchkit'
+import { useSemantic, useOnline } from './useSemantic'
 
 export default function Home() {
   const [places, setPlaces] = useState<IndexPlace[]>([])
@@ -33,6 +34,15 @@ export default function Home() {
     ...picks.m.search(expand(q)).slice(0, 3).map((r) => ({ kind: 'Movie', title: movies.find((m) => m.slug === r.id)?.title ?? '', to: `/movies?q=${encodeURIComponent(q)}` })),
     ...picks.b.search(expand(q)).slice(0, 3).map((r) => ({ kind: 'Book', title: books.find((b) => b.slug === r.id)?.title ?? '', to: `/books?q=${encodeURIComponent(q)}` })),
   ] : []
+  // Closest matches by meaning (online): things the exact words above didn't find.
+  const sem = useSemantic(q)
+  const online = useOnline()
+  const shownSlugs = new Set([...results.map((p) => p.slug), ...pickHits.map((h) => h.title)])
+  const closest = sem.map((h) => {
+    if (h.type === 'place') { const p = bySlug.get(h.slug); return p && !shownSlugs.has(p.slug) ? { key: `p${p.slug}`, badge: p.kind === 'spiritual' ? 'Darshan' : 'Explore', dark: p.kind === 'spiritual', title: p.name, sub: where(p), to: placeUrl(p) } : null }
+    const x = h.type === 'movie' ? movies.find((m) => m.slug === h.slug) : books.find((b) => b.slug === h.slug)
+    return x && !shownSlugs.has(x.title) ? { key: `${h.type}${x.slug}`, badge: h.type === 'movie' ? 'Movie' : 'Book', dark: false, title: x.title, sub: '', to: `/${h.type}s?q=${encodeURIComponent(x.title)}` } : null
+  }).filter((x): x is NonNullable<typeof x> => !!x).slice(0, 5)
 
   return (
     <main className="flex flex-col gap-5 px-5 pt-7">
@@ -51,7 +61,7 @@ export default function Home() {
             onKeyDown={(e) => { if (e.key === 'Enter' && results[0]) nav(placeUrl(results[0])) }}
             className="flex-1 h-12 bg-transparent outline-none text-base" />
         </label>
-        {(results.length > 0 || pickHits.length > 0) && (
+        {(results.length > 0 || pickHits.length > 0 || closest.length > 0) && (
           <ul className="absolute z-10 left-0 right-0 mt-2 list-none p-0 m-0 bg-white rounded-2xl border border-stone-200 shadow-lg overflow-hidden">
             {results.map((p) => (
               <li key={p.slug}><Link to={placeUrl(p)} className="flex items-center gap-3 px-4 py-3 no-underline text-ink hover:bg-stone-50">
@@ -65,9 +75,16 @@ export default function Home() {
                 <span className="flex-1 min-w-0 font-semibold truncate">{h.title}</span>
               </Link></li>
             ))}
+            {closest.length > 0 && <li className="px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted border-t border-stone-200">Closest matches</li>}
+            {closest.map((c) => (
+              <li key={c.key}><Link to={c.to} className="flex items-center gap-3 px-4 py-3 no-underline text-ink hover:bg-stone-50">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${c.badge === 'Darshan' ? 'bg-saffron/20 text-maroon' : c.badge === 'Explore' ? 'bg-forest/10 text-forest' : 'bg-ink text-white'}`}>{c.badge}</span>
+                <span className="flex-1 min-w-0"><span className="block font-semibold truncate">{c.title}</span>{c.sub && <span className="block text-sm text-muted truncate">{c.sub}</span>}</span>
+              </Link></li>
+            ))}
           </ul>
         )}
-        {q.trim().length >= 2 && results.length === 0 && pickHits.length === 0 && places.length > 0 && <p className="m-0 mt-2 text-sm text-muted">No match for “{q}”. Try another spelling or a state name.</p>}
+        {q.trim().length >= 2 && results.length === 0 && pickHits.length === 0 && closest.length === 0 && places.length > 0 && <p className="m-0 mt-2 text-sm text-muted">No match for “{q}”{online ? '. Try another spelling or a state name.' : '. You’re offline, so only exact words are searched — try again when connected.'}</p>}
       </div>
 
       <Link to="/explore" className="relative overflow-hidden flex flex-col justify-end gap-1 h-44 p-5 rounded-3xl bg-forest text-white no-underline">

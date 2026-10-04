@@ -25,5 +25,13 @@ migrations_dir = "migrations"
 binding = "PHOTOS"
 bucket_name = "q-locate-photos"
 
+# Meaning-based search: fingerprints are made here when content is published.
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "VEC"
+index_name = "q-locate-search"
+
 [triggers]
 crons = ["* * * * *"]

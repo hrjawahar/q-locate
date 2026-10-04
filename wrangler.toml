@@ -17,3 +17,11 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "PHOTOS"
 bucket_name = "q-locate-photos"
+
+# Meaning-based search ("closest matches"): Workers AI makes the fingerprints, Vectorize stores them.
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "VEC"
+index_name = "q-locate-search"

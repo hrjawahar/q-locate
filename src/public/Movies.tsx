@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { loadMovies, runtime, type Movie } from './data'
 import { processTerm, expand } from './searchkit'
 import PicksSwitch from './PicksSwitch'
+import { useSemantic } from './useSemantic'
 
 const LENGTHS: [string, string, (m: number) => boolean][] = [
   ['short', 'Under 1h 45m', (m) => m < 105], ['mid', '1h 45m – 2h 15m', (m) => m >= 105 && m <= 135], ['long', 'Over 2h 15m', (m) => m > 135],
@@ -38,6 +39,11 @@ export default function Movies() {
       && (!lang || (lang === 'en' ? !m.subtitles : !!m.subtitles)) && (!country || (m.country ?? '').includes(country))
       && (!lf || (m.runtime_min != null && lf(m.runtime_min))) && (!family || m.family_friendly === true))
   }, [all, ms, q, genre, topic, lang, country, len, family])
+  const sem = useSemantic(q)
+  const closest = useMemo(() => {
+    const listed = new Set(shown.map((x) => x.slug))
+    return sem.filter((h) => h.type === 'movie' && !listed.has(h.slug)).map((h) => (all ?? []).find((x) => x.slug === h.slug)).filter((x): x is Movie => !!x).slice(0, 6)
+  }, [sem, shown, all])
   const filtersOn = !!(genre || topic || lang || country || len || family || q)
 
   const surprise = () => {
@@ -90,7 +96,7 @@ export default function Movies() {
       <p className="m-0 px-5 text-sm text-muted" role="status">{all === null ? 'Loading…' : `${shown.length} ${shown.length === 1 ? 'movie' : 'movies'}`}
         {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setGenre(''); setTopic(''); setLang(''); setCountry(''); setLen(''); setFamily(false) }}>Clear</button>}</p>
 
-      {all !== null && shown.length === 0 && (
+      {all !== null && shown.length === 0 && closest.length === 0 && (
         <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">{all.length ? 'Nothing matches.' : 'Movie Picks are coming soon.'}</p>
           {all.length > 0 && <p className="m-0 mt-1 text-sm text-muted">Try fewer filters.</p>}</div>
       )}
@@ -120,6 +126,19 @@ export default function Movies() {
           </li>
         ))}
       </ul>
+      {closest.length > 0 && (
+        <section className="px-5 flex flex-col gap-2" aria-label="Closest matches">
+          <h2 className="m-0 text-sm font-bold uppercase tracking-wider text-muted">Closest matches</h2>
+          <ul className="list-none m-0 p-0 flex flex-col gap-2">
+            {closest.map((m) => (
+              <li key={m.slug}><button onClick={() => setQ(m.title)} className="w-full text-left p-3 bg-white rounded-2xl">
+                <div className="font-semibold">{m.title}</div><div className="text-sm text-muted">{[m.year, m.genres.join(', '), runtime(m.runtime_min)].filter(Boolean).join(' · ')}</div>
+                {m.pitch && <div className="text-sm mt-1 line-clamp-2">{m.pitch}</div>}
+              </button></li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className="m-0 px-5 py-6 text-xs text-muted leading-relaxed">Picks come from reviewers' public reels, credited above; Q-Locate isn't affiliated with them or the films. Details are drafted with help from Wikidata and AI and checked by Q-Locate. Check the age rating and where it's streaming before you watch.</p>
     </main>
   )

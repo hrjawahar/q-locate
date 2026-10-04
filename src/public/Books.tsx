@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { loadBooks, type Book } from './data'
 import { processTerm, expand } from './searchkit'
 import PicksSwitch from './PicksSwitch'
+import { useSemantic } from './useSemantic'
 
 const LENGTHS: [string, string, (p: number) => boolean][] = [
   ['short', 'Quick read (under 250 pages)', (p) => p < 250], ['mid', '250 – 450 pages', (p) => p >= 250 && p <= 450], ['long', 'Long read (450+ pages)', (p) => p > 450],
@@ -35,6 +36,11 @@ export default function Books() {
     return xs.filter((b) => inKind(b) && (!genre || b.genres.includes(genre)) && (!lf || (b.pages != null && lf(b.pages)))
       && (!translated || (translated === 'orig' ? !/translated/i.test(b.language ?? '') : /translated/i.test(b.language ?? ''))))
   }, [all, ms, q, kind, genre, len, translated]) // eslint-disable-line react-hooks/exhaustive-deps
+  const sem = useSemantic(q)
+  const closest = useMemo(() => {
+    const listed = new Set(shown.map((x) => x.slug))
+    return sem.filter((h) => h.type === 'book' && !listed.has(h.slug)).map((h) => (all ?? []).find((x) => x.slug === h.slug)).filter((x): x is Book => !!x).slice(0, 6)
+  }, [sem, shown, all])
   const filtersOn = !!(kind || genre || len || translated || q)
 
   const surprise = () => {
@@ -81,7 +87,7 @@ export default function Books() {
       <p className="m-0 px-5 text-sm text-muted" role="status">{all === null ? 'Loading…' : `${shown.length} ${shown.length === 1 ? 'book' : 'books'}`}
         {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setKind(''); setGenre(''); setLen(''); setTranslated('') }}>Clear</button>}</p>
 
-      {all !== null && shown.length === 0 && (
+      {all !== null && shown.length === 0 && closest.length === 0 && (
         <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">{all.length ? 'Nothing matches.' : 'Book Picks are coming soon.'}</p>
           {all.length > 0 && <p className="m-0 mt-1 text-sm text-muted">Try fewer filters.</p>}</div>
       )}
@@ -111,6 +117,19 @@ export default function Books() {
           </li>
         ))}
       </ul>
+      {closest.length > 0 && (
+        <section className="px-5 flex flex-col gap-2" aria-label="Closest matches">
+          <h2 className="m-0 text-sm font-bold uppercase tracking-wider text-muted">Closest matches</h2>
+          <ul className="list-none m-0 p-0 flex flex-col gap-2">
+            {closest.map((b) => (
+              <li key={b.slug}><button onClick={() => setQ(b.title)} className="w-full text-left p-3 bg-white rounded-2xl">
+                <div className="font-semibold">{b.title}</div><div className="text-sm text-muted">{[b.author, b.genres.join(', ')].filter(Boolean).join(' · ')}</div>
+                {b.pitch && <div className="text-sm mt-1 line-clamp-2">{b.pitch}</div>}
+              </button></li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className="m-0 px-5 py-6 text-xs text-muted leading-relaxed">Picks come from reviewers' public reels, credited above; Q-Locate isn't affiliated with them, the authors or publishers. Details are drafted with help from Wikidata and AI and checked by Q-Locate.</p>
     </main>
   )

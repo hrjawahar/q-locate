@@ -2,7 +2,7 @@
 // Results are cached per query (until something is published or changed) and each visitor is limited
 // to a sensible number of searches per minute.
 import { Env, json } from './util'
-import { embed, type SearchBindings } from './embed'
+import { embed, unpack, type SearchBindings } from './embed'
 
 const MIN_SCORE = 0.45
 const PER_MINUTE = 40
@@ -16,21 +16,32 @@ function limited(ip: string) {
   return h.n > PER_MINUTE
 }
 
+// The fingerprints, kept in memory and reloaded only when something was published or changed.
+let loaded: { version: string; ids: string[]; vecs: Float32Array[] } | null = null
+async function vectors(env: Env, version: string) {
+  if (loaded?.version === version) return loaded
+  const { results } = await env.DB.prepare('SELECT id, vec FROM search_vectors').all<{ id: string; vec: string }>()
+  loaded = { version, ids: results.map((r) => r.id), vecs: results.map((r) => unpack(r.vec)) }
+  return loaded
+}
+
 export async function semantic(request: Request, env: Env & SearchBindings, ctx: ExecutionContext) {
   const url = new URL(request.url)
   const q = (url.searchParams.get('q') ?? '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 120)
   if (q.length < 3) return json({ results: [] })
-  if (!env.AI || !env.VEC) return json({ results: [], off: true })
+  if (!env.AI) return json({ results: [], off: true })
 
-  const versions = await env.DB.prepare("SELECT group_concat(key || '=' || value, ';') AS v FROM meta WHERE key IN ('index_version', 'movies_version', 'books_version')").first<string>('v')
+  const versions = await env.DB.prepare("SELECT group_concat(key || '=' || value, ';') AS v FROM meta WHERE key IN ('index_version', 'movies_version', 'books_version', 'vec_version')").first<string>('v')
   const cacheKey = new Request(new URL(`/api/semantic?q=${encodeURIComponent(q)}&v=${encodeURIComponent(versions ?? '')}`, url).toString())
   const cached = await caches.default.match(cacheKey)
   if (cached) return cached
   if (limited(request.headers.get('cf-connecting-ip') ?? 'anon')) return json({ error: 'Too many searches — try again in a minute' }, { status: 429 })
 
-  const [vector] = await embed(env, [q])
-  const res = await env.VEC.query(vector, { topK: 20 })
-  const matches = res.matches.filter((m) => m.score >= MIN_SCORE)
+  const vecVersion = (await env.DB.prepare("SELECT value FROM meta WHERE key = 'vec_version'").first<string>('value').catch(() => null)) ?? '0'
+  const [[query], store] = await Promise.all([embed(env, [q]), vectors(env, vecVersion).catch(() => ({ ids: [], vecs: [] as Float32Array[] }))])
+  // Cosine similarity (fingerprints are normalised, so a dot product).
+  const scored = store.vecs.map((v, i) => { let s = 0; for (let k = 0; k < v.length; k++) s += v[k] * query[k]; return { id: store.ids[i], score: s } })
+  const matches = scored.filter((m) => m.score >= MIN_SCORE).sort((a, b) => b.score - a.score).slice(0, 20)
   const ids = (p: string) => matches.filter((m) => m.id.startsWith(`${p}:`)).map((m) => Number(m.id.slice(2))).filter(Boolean)
   // Only items still published come back (a table that doesn't exist yet just gives nothing).
   const list = async (sql: string, xs: number[]) => xs.length

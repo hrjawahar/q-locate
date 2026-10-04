@@ -3,7 +3,6 @@ export interface Env {
   PHOTOS: R2Bucket
   ASSETS: Fetcher
   AI?: Ai
-  VEC?: VectorizeIndex
 }
 
 export const json = (data: unknown, init: ResponseInit = {}) =>

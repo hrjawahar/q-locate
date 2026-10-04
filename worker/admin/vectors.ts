@@ -2,7 +2,7 @@
 // anything changed since the last run is (re)fingerprinted if published, or removed if not.
 import { json, parseJson } from '../util'
 import type { AdminEnv } from './auth'
-import { embed, type SearchBindings } from '../embed'
+import { embed, pack, ENSURE_TABLE, type SearchBindings } from '../embed'
 
 type Env = AdminEnv & SearchBindings
 const BATCH = 40
@@ -42,7 +42,8 @@ const SOURCES = {
 
 /** Process a batch of changed items per table. Returns how many were handled. */
 export async function sync(env: Env) {
-  if (!env.AI || !env.VEC) return 0
+  if (!env.AI) return 0
+  await env.DB.prepare(ENSURE_TABLE).run()
   let done = 0
   for (const [table, src] of Object.entries(SOURCES)) {
     const key = `vec_${table}`
@@ -56,11 +57,16 @@ export async function sync(env: Env) {
     if (!rows.length) continue
     const live = rows.filter((r) => r.status === 'published')
     const gone = rows.filter((r) => r.status !== 'published').map((r) => `${src.prefix}:${r.id}`)
+    const stmts: D1PreparedStatement[] = []
     if (live.length) {
       const vectors = await embed(env, live.map((r) => src.text(r)))
-      await env.VEC.upsert(live.map((r, i) => ({ id: `${src.prefix}:${r.id}`, values: vectors[i] })))
+      live.forEach((r, i) => stmts.push(env.DB.prepare("INSERT INTO search_vectors (id, vec, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(id) DO UPDATE SET vec = excluded.vec, updated_at = excluded.updated_at")
+        .bind(`${src.prefix}:${r.id}`, pack(vectors[i]))))
     }
-    if (gone.length) await env.VEC.deleteByIds(gone)
+    gone.forEach((id) => stmts.push(env.DB.prepare('DELETE FROM search_vectors WHERE id = ?').bind(id)))
+    // Tell the public app its copy of the fingerprints is out of date.
+    stmts.push(env.DB.prepare("INSERT INTO meta (key, value) VALUES ('vec_version', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1"))
+    await env.DB.batch(stmts)
     const last = rows[rows.length - 1]
     await env.DB.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(key, `${last.updated_at}|${last.id}`).run()
     done += rows.length
@@ -69,9 +75,11 @@ export async function sync(env: Env) {
 }
 
 /** Admin: status and a "rebuild from scratch" switch. */
+export async function count(env: Env) {
+  return env.DB.prepare('SELECT count(*) AS n FROM search_vectors').first<number>('n').catch(() => 0)
+}
 export async function status(env: Env) {
-  const info = env.VEC ? await env.VEC.describe().catch(() => null) : null
-  return json({ ai: !!env.AI, vec: !!env.VEC, count: (info as { vectorsCount?: number; vectorCount?: number } | null)?.vectorsCount ?? (info as { vectorCount?: number } | null)?.vectorCount ?? null })
+  return json({ ai: !!env.AI, count: await count(env) })
 }
 export async function rebuild(env: Env) {
   await env.DB.prepare("DELETE FROM meta WHERE key IN ('vec_places', 'vec_movies', 'vec_books')").run()

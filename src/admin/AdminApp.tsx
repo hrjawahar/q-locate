@@ -9,6 +9,7 @@ import Activity from './Activity'
 import Import from './Import'
 import Tracker from './Tracker'
 import { MoviesList, MovieForm } from './Movies'
+import { BooksList, BookForm } from './Books'
 
 export default function AdminApp() {
   const [me, setMe] = useState<Me | null>(null)
@@ -47,11 +48,12 @@ export default function AdminApp() {
         <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 px-4 py-3">
           <LogoMark size={30} bg="#FFFFFF" />
           <span className="font-display font-bold mr-4">Q-Locate Admin</span>
-          <nav className="flex gap-1 text-sm font-semibold">
+          <nav className="flex flex-wrap gap-1 text-sm font-semibold">
             <NavLink to="/admin" end className={link}>Places</NavLink>
             {me.role !== 'editor' && <NavLink to="/admin/import" className={link}>Import</NavLink>}
             {me.role !== 'editor' && (me.scope === 'all' || me.scope === 'spiritual') && <NavLink to="/admin/tracker" className={link}>Temple tracker</NavLink>}
             {me.scope === 'all' && <NavLink to="/admin/movies" className={link}>Movie Picks</NavLink>}
+            {me.scope === 'all' && <NavLink to="/admin/books" className={link}>Book Picks</NavLink>}
             {me.role !== 'editor' && <NavLink to="/admin/activity" className={link}>Activity</NavLink>}
             {me.role === 'owner' && <NavLink to="/admin/users" className={link}>Admins</NavLink>}
           </nav>
@@ -68,6 +70,8 @@ export default function AdminApp() {
           {me.role !== 'editor' && <Route path="tracker" element={<Tracker />} />}
           {me.scope === 'all' && <Route path="movies" element={<MoviesList me={me} />} />}
           {me.scope === 'all' && <Route path="movies/:id" element={<MovieForm me={me} />} />}
+          {me.scope === 'all' && <Route path="books" element={<BooksList me={me} />} />}
+          {me.scope === 'all' && <Route path="books/:id" element={<BookForm me={me} />} />}
           {me.role === 'owner' && <Route path="users" element={<Users me={me} />} />}
         </Routes>
       </div>

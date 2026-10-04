@@ -5,6 +5,7 @@ import * as api from './api'
 import * as imp from './importer'
 import * as tracker from './tracker'
 import * as movies from './movies'
+import * as books from './books'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
 // every /api/admin call also checks the admins table.
@@ -42,6 +43,18 @@ export default {
       if (pathname === '/api/admin/upload' && m === 'POST') return api.upload(request, env, admin)
       if (pathname === '/api/admin/places/bulk' && m === 'POST') return api.bulkStatus(await body(), env, admin)
       if (pathname === '/api/admin/wikidata/search' && m === 'GET') return imp.wikidataSearch(url)
+      if (pathname.startsWith('/api/admin/books')) {
+        if (admin.scope !== 'all') return json({ error: 'Book Picks needs an admin with access to all sections' }, { status: 403 })
+        const bm = pathname.match(/^\/api\/admin\/books\/(\d+)(\/(status|recs))?$/)
+        if (pathname === '/api/admin/books' && m === 'GET') return books.list(url, env)
+        if (pathname === '/api/admin/books' && m === 'POST') return books.save(null, await body(), env, admin)
+        if (pathname === '/api/admin/books/fill' && m === 'POST') return books.fill(await body(), env)
+        if (bm && !bm[2] && m === 'GET') return books.get(Number(bm[1]), env)
+        if (bm && !bm[2] && m === 'PUT') return books.save(Number(bm[1]), await body(), env, admin)
+        if (bm && !bm[2] && m === 'DELETE') return books.remove(Number(bm[1]), env, admin)
+        if (bm && bm[3] === 'status' && m === 'POST') return books.setStatus(Number(bm[1]), await body(), env, admin)
+        if (bm && bm[3] === 'recs' && m === 'POST') return books.addRec(Number(bm[1]), await body(), env, admin)
+      }
       if (pathname.startsWith('/api/admin/movies')) {
         if (admin.scope !== 'all') return json({ error: 'Movie Picks needs an admin with access to all sections' }, { status: 403 })
         const mm = pathname.match(/^\/api\/admin\/movies\/(\d+)(\/(status|recs))?$/)

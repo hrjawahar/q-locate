@@ -1,11 +1,13 @@
 import MiniSearch from 'minisearch'
 import { get, set, del, keys } from 'idb-keyval'
+import { processTerm, expand } from './searchkit'
 
 export type Kind = 'vacation' | 'spiritual'
 export interface IndexPlace {
   slug: string; kind: Kind; name: string; alt_names: string; country: string; state: string; district_city: string; city: string
   tags: string; deity: string; categories: string[]; circuits: string[]; best_months: number[]
   typical_visit: string | null; access_effort: string | null; thumb: string | null; summary: string; hours: { open: string; close: string }[]
+  text?: string
 }
 export interface Meta { categories: { kind: Kind; slug: string; name: string }[]; circuits: { slug: string; name: string; total_count: number | null }[] }
 export type Place = Record<string, any>
@@ -46,12 +48,13 @@ export async function loadPlace(slug: string): Promise<Place | null> {
 export function makeSearch(places: IndexPlace[]) {
   const ms = new MiniSearch<IndexPlace>({
     idField: 'slug',
-    fields: ['name', 'alt_names', 'deity', 'city', 'district_city', 'state', 'country', 'tags'],
+    fields: ['name', 'alt_names', 'deity', 'city', 'district_city', 'state', 'country', 'tags', 'text'],
     storeFields: ['slug'],
-    searchOptions: { prefix: true, fuzzy: 0.2, boost: { name: 4, alt_names: 3, deity: 3, city: 2, district_city: 2, state: 2 } },
+    processTerm,
+    searchOptions: { prefix: true, fuzzy: 0.15, boost: { name: 4, alt_names: 3, deity: 3, city: 2, district_city: 2, state: 2, tags: 2, text: 1 } },
   })
   ms.addAll(places)
-  return (q: string) => ms.search(q).map((r) => r.id as string)
+  return (q: string) => ms.search(expand(q)).map((r) => r.id as string)
 }
 
 // ---------- Saved places (kept on the device, work offline) ----------
@@ -102,3 +105,17 @@ export function loadMovies(): Promise<Movie[]> {
   return moviesPromise
 }
 export const runtime = (m: number | null) => (m ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : '')
+
+// ---------- Book Picks ----------
+export interface Book {
+  slug: string; title: string; author: string | null; year: number | null; language: string | null; fiction: boolean | null
+  genres: string[]; topic: string | null; pages: number | null; pitch: string | null; published_at: string | null
+  recs: { handle: string | null; url: string | null }[]
+}
+let booksPromise: Promise<Book[]> | null = null
+export function loadBooks(): Promise<Book[]> {
+  booksPromise ??= getJson<{ books: Book[] }>('/api/books.json')
+    .then(async (d) => { await set('books', d.books).catch(() => {}); return d.books })
+    .catch(async () => ((await get('books').catch(() => null)) as Book[] | undefined) ?? [])
+  return booksPromise
+}

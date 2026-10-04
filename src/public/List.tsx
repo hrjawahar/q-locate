@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Footer } from './Layout'
+import { snippet } from './searchkit'
 import { loadIndex, loadMeta, makeSearch, openNow, placeUrl, where, MONTHS, ACCESS, VISIT, type IndexPlace, type Kind, type Meta } from './data'
 
 const selectCls = 'h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-[15px]'
@@ -104,6 +105,7 @@ export default function List({ kind }: { kind: Kind }) {
               <div className="flex-1 min-w-0">
                 <div className="font-serif text-[17px] font-bold text-maroon leading-snug">{p.name}</div>
                 <div className="text-sm text-muted truncate">{[p.deity, where(p)].filter(Boolean).join(' · ')}</div>
+                {q.trim().length >= 2 && snippet(p.text, q) && <div className="text-xs mt-0.5 line-clamp-2">{snippet(p.text, q)}</div>}
               </div>
               {o !== null && <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-full ${o ? 'bg-green-100 text-green-900' : 'bg-stone-200 text-stone-700'}`}>{o ? 'Open now' : 'Closed'}</span>}
             </Link></li>
@@ -117,6 +119,7 @@ export default function List({ kind }: { kind: Kind }) {
               <div className="p-3">
                 <div className="font-display font-semibold leading-snug">{p.name}</div>
                 <div className="text-xs text-muted mt-0.5 truncate">{where(p)}</div>
+                {q.trim().length >= 2 && snippet(p.text, q) && <div className="text-xs mt-1 line-clamp-3">{snippet(p.text, q)}</div>}
                 {p.best_months.includes(new Date().getMonth() + 1) && <div className="mt-2 inline-block text-[11px] font-bold px-2 py-0.5 rounded-full bg-forest/10 text-forest">In season</div>}
               </div>
             </Link></li>

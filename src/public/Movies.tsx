@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import MiniSearch from 'minisearch'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { loadMovies, runtime, type Movie } from './data'
+import { processTerm, expand } from './searchkit'
+import PicksSwitch from './PicksSwitch'
 
 const LENGTHS: [string, string, (m: number) => boolean][] = [
   ['short', 'Under 1h 45m', (m) => m < 105], ['mid', '1h 45m – 2h 15m', (m) => m >= 105 && m <= 135], ['long', 'Over 2h 15m', (m) => m > 135],
@@ -11,14 +13,15 @@ const sel = 'h-11 rounded-xl border border-stone-300 bg-white px-3 text-[15px]'
 
 export default function Movies() {
   const [all, setAll] = useState<Movie[] | null>(null)
-  const [q, setQ] = useState('')
+  const [params] = useSearchParams()
+  const [q, setQ] = useState(params.get('q') ?? '')
   const [genre, setGenre] = useState(''), [topic, setTopic] = useState(''), [lang, setLang] = useState(''), [country, setCountry] = useState('')
   const [len, setLen] = useState(''), [family, setFamily] = useState(false)
   const [pick, setPick] = useState<string | null>(null)
   useEffect(() => { loadMovies().then(setAll); document.title = 'Movie Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const ms = useMemo(() => {
-    const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch'], storeFields: ['slug'],
+    const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch'], storeFields: ['slug'], processTerm,
       searchOptions: { prefix: true, fuzzy: 0.2, boost: { title: 4, genresText: 2, doc_topic: 2, country: 2 } } })
     s.addAll((all ?? []).map((m) => ({ ...m, genresText: m.genres.join(' ') })))
     return s
@@ -29,7 +32,7 @@ export default function Movies() {
 
   const shown = useMemo(() => {
     let xs = all ?? []
-    if (q.trim().length >= 2) { const ids = ms.search(q).map((r) => r.id as string); const rank = new Map(ids.map((s, i) => [s, i])); xs = xs.filter((m) => rank.has(m.slug)).sort((a, b) => rank.get(a.slug)! - rank.get(b.slug)!) }
+    if (q.trim().length >= 2) { const ids = ms.search(expand(q)).map((r) => r.id as string); const rank = new Map(ids.map((s, i) => [s, i])); xs = xs.filter((m) => rank.has(m.slug)).sort((a, b) => rank.get(a.slug)! - rank.get(b.slug)!) }
     const lf = LENGTHS.find((l) => l[0] === len)?.[2]
     return xs.filter((m) => (!genre || m.genres.includes(genre)) && (!topic || m.doc_topic === topic)
       && (!lang || (lang === 'en' ? !m.subtitles : !!m.subtitles)) && (!country || (m.country ?? '').includes(country))
@@ -55,10 +58,12 @@ export default function Movies() {
         </div>
       </header>
 
+      <PicksSwitch />
+
       <div className="px-5 flex gap-2">
-        <label className="flex-1 flex items-center gap-2 h-12 px-4 bg-white border border-stone-300 rounded-2xl">
+        <label className="flex-1 min-w-0 flex items-center gap-2 h-12 px-4 bg-white border border-stone-300 rounded-2xl">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6B5E" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" /></svg>
-          <input type="search" aria-label="Search movies" placeholder="Title, country or mood" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 bg-transparent outline-none text-base" />
+          <input type="search" aria-label="Search movies" placeholder="Title, country or mood" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-0 bg-transparent outline-none text-base" />
         </label>
         <button onClick={surprise} disabled={!shown.length} className="h-12 px-3 rounded-2xl bg-saffron text-maroon font-bold whitespace-nowrap text-sm disabled:opacity-50">Pick for me</button>
       </div>

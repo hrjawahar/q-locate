@@ -21,9 +21,9 @@ export default function Movies() {
   useEffect(() => { loadMovies().then(setAll); document.title = 'Movie Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const ms = useMemo(() => {
-    const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch'], storeFields: ['slug'], processTerm,
+    const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch', 'who'], storeFields: ['slug'], processTerm,
       searchOptions: { prefix: true, fuzzy: 0.2, boost: { title: 4, genresText: 2, doc_topic: 2, country: 2 } } })
-    s.addAll((all ?? []).map((m) => ({ ...m, genresText: m.genres.join(' ') })))
+    s.addAll((all ?? []).map((m) => ({ ...m, genresText: m.genres.join(' '), who: m.recs.map((r) => r.handle ?? '').join(' ') })))
     return s
   }, [all])
   const genres = useMemo(() => [...new Set((all ?? []).flatMap((m) => m.genres))].sort(), [all])
@@ -53,7 +53,7 @@ export default function Movies() {
         <Link to="/" aria-label="Back to home" className="w-11 h-11 -ml-2 grid place-items-center rounded-full text-ink no-underline text-2xl">‹</Link>
         <div>
           <h1 className="m-0 font-display text-3xl font-bold tracking-tight">Movie Picks</h1>
-          <p className="m-0 text-sm text-muted">English movies reviewers loved — pick one for the weekend</p>
+          <p className="m-0 text-sm text-muted">English movies reviewers loved — find your next watch</p>
           <p className="m-0 mt-1 text-xs font-semibold text-forest">English only: films in English, or world cinema with English subtitles</p>
         </div>
       </header>
@@ -98,7 +98,7 @@ export default function Movies() {
       <ul className="list-none m-0 px-5 flex flex-col gap-3">
         {shown.map((m) => (
           <li key={m.slug} id={`m-${m.slug}`} className={`p-4 rounded-2xl bg-white flex flex-col gap-2 transition-shadow ${pick === m.slug ? 'ring-4 ring-saffron' : ''}`}>
-            {pick === m.slug && <span className="self-start text-[11px] font-bold uppercase tracking-wider text-maroon">Tonight's pick</span>}
+            {pick === m.slug && <span className="self-start text-[11px] font-bold uppercase tracking-wider text-maroon">Your next watch</span>}
             <div>
               <h2 className="m-0 font-display text-xl font-bold leading-snug">{m.title}{m.year ? <span className="font-normal text-muted"> ({m.year})</span> : null}</h2>
               <div className="text-sm text-muted">{[m.country, m.language && (m.subtitles ? `${m.language} · ${m.subtitles}` : m.language), runtime(m.runtime_min)].filter(Boolean).join(' · ')}</div>

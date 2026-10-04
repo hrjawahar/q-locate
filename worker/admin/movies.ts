@@ -137,7 +137,7 @@ async function wdFilm(title: string, year: number | null) {
   }
 }
 
-const SYSTEM = `You fill short catalogue entries for "Movie Picks", a list of reviewed movies people can pick from for the weekend.
+const SYSTEM = `You fill short catalogue entries for "Movie Picks", a list of reviewed movies people can pick their next watch from.
 Rules:
 - Use the facts given and, if a web_search tool is available, 1-3 searches on reliable film sites (Wikipedia, official studio/distributor pages, established film databases and newspapers).
 - Never invent. If unsure of a field, leave it empty.

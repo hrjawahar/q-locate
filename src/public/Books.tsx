@@ -20,9 +20,9 @@ export default function Books() {
   useEffect(() => { loadBooks().then(setAll); document.title = 'Book Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const ms = useMemo(() => {
-    const s = new MiniSearch<Book & { genresText: string }>({ idField: 'slug', fields: ['title', 'author', 'genresText', 'topic', 'pitch', 'language'], storeFields: ['slug'], processTerm,
+    const s = new MiniSearch<Book & { genresText: string; who: string }>({ idField: 'slug', fields: ['title', 'author', 'genresText', 'topic', 'pitch', 'language', 'who'], storeFields: ['slug'], processTerm,
       searchOptions: { prefix: true, fuzzy: 0.15, boost: { title: 4, author: 3, genresText: 2, topic: 2 } } })
-    s.addAll((all ?? []).map((b) => ({ ...b, genresText: b.genres.join(' ') })))
+    s.addAll((all ?? []).map((b) => ({ ...b, genresText: b.genres.join(' '), who: b.recs.map((r) => r.handle ?? '').join(' ') })))
     return s
   }, [all])
   const inKind = (b: Book) => !kind || (kind === 'f' ? b.fiction === true : b.fiction === false)

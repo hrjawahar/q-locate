@@ -25,8 +25,8 @@ export default function Home() {
       ms.addAll(xs.map(doc)); return ms
     }
     return {
-      m: mk(movies, ['title', 'g', 'doc_topic', 'pitch', 'country'], (m) => ({ ...m, g: m.genres.join(' ') })),
-      b: mk(books, ['title', 'author', 'g', 'topic', 'pitch'], (b) => ({ ...b, g: b.genres.join(' ') })),
+      m: mk(movies, ['title', 'g', 'doc_topic', 'pitch', 'country', 'language', 'who'], (m) => ({ ...m, g: m.genres.join(' '), who: m.recs.map((r) => r.handle ?? '').join(' ') })),
+      b: mk(books, ['title', 'author', 'g', 'topic', 'pitch', 'language', 'who'], (b) => ({ ...b, g: b.genres.join(' '), who: b.recs.map((r) => r.handle ?? '').join(' ') })),
     }
   }, [movies, books])
   const pickHits = q.trim().length >= 2 ? [
@@ -86,7 +86,7 @@ export default function Home() {
       <div className="grid grid-cols-2 gap-3">
         <Link to="/movies" className="flex flex-col gap-1 p-4 bg-ink text-white rounded-2xl no-underline">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F2B35C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16v14H4zM4 9h16M8 5l2 4M13 5l2 4M10 12.5v4l3.5-2z" /></svg>
-          <span className="font-bold">Movie Picks</span><span className="text-xs text-white/75">For your weekend</span>
+          <span className="font-bold">Movie Picks</span><span className="text-xs text-white/75">Your next watch</span>
         </Link>
         <Link to="/books" className="flex flex-col gap-1 p-4 bg-[#3B2A1F] text-white rounded-2xl no-underline">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F2B35C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v15H5.5A1.5 1.5 0 0 0 4 19.5zM4 19.5A1.5 1.5 0 0 0 5.5 21H20M8 7h8" /></svg>

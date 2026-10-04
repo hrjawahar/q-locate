@@ -61,7 +61,7 @@ export function MoviesList({ me }: { me: Me }) {
   return (
     <section className="flex flex-col gap-5">
       <h1 className="m-0 font-display text-2xl font-bold">Movie Picks</h1>
-      <p className="m-0 text-sm text-muted">A short, reviewed list of English movies (or films with English subtitles) users can pick from for the weekend. Paste the reel you saw; Wikidata and AI fill the details as a draft for you to check. Reviewers are always credited.</p>
+      <p className="m-0 text-sm text-muted">A short, reviewed list of English movies (or films with English subtitles) users can pick their next watch from. Paste the reel you saw; Wikidata and AI fill the details as a draft for you to check. Reviewers are always credited.</p>
 
       <div className="p-4 rounded-xl border border-stone-200 flex flex-col gap-3">
         <h2 className="m-0 text-lg font-semibold">Add from a reel</h2>

@@ -6,6 +6,7 @@ import * as imp from './importer'
 import * as tracker from './tracker'
 import * as movies from './movies'
 import * as books from './books'
+import * as festivals from './festivals'
 import * as vectors from './vectors'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
@@ -49,6 +50,18 @@ export default {
       if (pathname === '/api/admin/search/status' && m === 'GET') return vectors.status(env)
       if (pathname === '/api/admin/search/rebuild' && m === 'POST' && admin.role === 'owner') return vectors.rebuild(env)
       if (pathname === '/api/admin/search/sync' && m === 'POST' && admin.role !== 'editor') return json({ done: await vectors.sync(env) })
+      if (pathname.startsWith('/api/admin/festivals')) {
+        if (admin.scope !== 'all') return json({ error: 'Festivals needs an admin with access to all sections' }, { status: 403 })
+        const fm = pathname.match(/^\/api\/admin\/festivals\/(\d+)(\/(status|dates))?$/)
+        if (pathname === '/api/admin/festivals' && m === 'GET') return festivals.list(url, env)
+        if (pathname === '/api/admin/festivals' && m === 'POST') return festivals.save(null, await body(), env, admin)
+        if (pathname === '/api/admin/festivals/fill' && m === 'POST') return festivals.fill(await body(), env)
+        if (fm && !fm[2] && m === 'GET') return festivals.get(Number(fm[1]), env)
+        if (fm && !fm[2] && m === 'PUT') return festivals.save(Number(fm[1]), await body(), env, admin)
+        if (fm && !fm[2] && m === 'DELETE') return festivals.remove(Number(fm[1]), env, admin)
+        if (fm && fm[3] === 'status' && m === 'POST') return festivals.setStatus(Number(fm[1]), await body(), env, admin)
+        if (fm && fm[3] === 'dates' && m === 'POST') return festivals.refreshDates(Number(fm[1]), env, admin)
+      }
       if (pathname.startsWith('/api/admin/books')) {
         if (admin.scope !== 'all') return json({ error: 'Book Picks needs an admin with access to all sections' }, { status: 403 })
         const bm = pathname.match(/^\/api\/admin\/books\/(\d+)(\/(status|recs))?$/)

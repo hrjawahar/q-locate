@@ -6,6 +6,7 @@ import { img } from './img'
 import { moviesJson } from './movies'
 import { booksJson } from './books'
 import { semantic } from './semantic'
+import { festivalsJson } from './festivals'
 
 // Entry point: /api/* and /img/* run here; everything else is the React app (dist/).
 export default {
@@ -18,6 +19,7 @@ export default {
       if (pathname === '/api/search') return search(request, env)
       if (pathname === '/api/movies.json') return moviesJson(env)
       if (pathname === '/api/books.json') return booksJson(env)
+      if (pathname === '/api/festivals.json') return festivalsJson(env)
       if (pathname === '/api/semantic') return semantic(request, env, ctx)
       if (pathname === '/api/meta') {
         const [c, ci] = await env.DB.batch([

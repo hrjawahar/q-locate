@@ -5,7 +5,7 @@ import { downloadPlacePdf } from './pdf'
 import { LogoMark } from '../components/Logo'
 import { Footer } from './Layout'
 import { CONFIG } from './config'
-import { loadPlace, isSaved, savePlace, unsavePlace, openNow, fmtTime, km, where, placeUrl, ACCESS, VISIT, STAY, AMENITY, MONTHS, type Place } from './data'
+import { loadPlace, loadFestivals, festivalDates, festivalMonths, type Festival, isSaved, savePlace, unsavePlace, openNow, fmtTime, km, where, placeUrl, ACCESS, VISIT, STAY, AMENITY, MONTHS, type Place } from './data'
 
 const H = ({ children, dark }: { children: React.ReactNode; dark: boolean }) =>
   <h2 className={`m-0 mb-3 text-xl font-bold ${dark ? 'font-serif text-maroon' : 'font-display text-forest'}`}>{children}</h2>
@@ -18,11 +18,13 @@ export default function PlacePage() {
   const [qr, setQr] = useState<{ maps: string; page: string } | null>(null)
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
+  const [fests, setFests] = useState<Festival[]>([])
 
   useEffect(() => {
     setP(undefined)
     loadPlace(slug).then((x) => { setP(x); if (x) document.title = `${x.name} — Q-Locate` })
     isSaved(slug).then(setSaved)
+    loadFestivals().then((all) => setFests(all.filter((f) => f.places.some((p) => p.slug === slug))))
     return () => { document.title = 'Q-Locate — Quick location guide' }
   }, [slug])
 
@@ -90,7 +92,7 @@ export default function PlacePage() {
         <a className={action} href={mapsUrl} target="_blank" rel="noreferrer"><I d="M12 21s-7-6.3-7-11.5A7 7 0 0 1 19 9.5C19 14.7 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />Directions</a>
         <button className={action} onClick={toggleSave} aria-pressed={saved}><I d="M6 3h12v18l-6-4-6 4z" />{saved ? 'Saved' : 'Save'}</button>
         <button className={action} onClick={share}><I d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13" />Share</button>
-        <button className={action} disabled={busy} onClick={async () => { setBusy(true); flash('Preparing PDF…'); try { await downloadPlacePdf(p, pageUrl, mapsUrl); flash('PDF downloaded') } catch { flash('Could not make the PDF. Try again.') } finally { setBusy(false) } }}><I d="M12 3v12M7 10l5 5 5-5M5 21h14" />{busy ? 'Wait…' : 'PDF'}</button>
+        <button className={action} disabled={busy} onClick={async () => { setBusy(true); flash('Preparing PDF…'); try { await downloadPlacePdf(p, pageUrl, mapsUrl, fests); flash('PDF downloaded') } catch { flash('Could not make the PDF. Try again.') } finally { setBusy(false) } }}><I d="M12 3v12M7 10l5 5 5-5M5 21h14" />{busy ? 'Wait…' : 'PDF'}</button>
         {website && <a className={action} href={website} target="_blank" rel="noreferrer"><I d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />Website</a>}
         {reel && <a className={action} href={reel.url} target="_blank" rel="noreferrer"><I d="M5 3l14 9-14 9V3z" />Watch</a>}
       </div>
@@ -114,6 +116,21 @@ export default function PlacePage() {
             {(p.circuits ?? []).map((c: Place) => <><dt key={`t${c.slug}`} className="font-semibold">Circuit</dt><dd key={`d${c.slug}`} className="m-0">{c.name}{c.position ? ` — no. ${c.position}` : ''}</dd></>)}
           </dl>
           {d.pooja_booking_url && <a href={d.pooja_booking_url} target="_blank" rel="noreferrer" className="no-print inline-block mt-3 font-semibold">Book pooja / darshan ↗</a>}
+        </Section>
+      )}
+
+      {fests.length > 0 && (
+        <Section><H dark={dark}>Festivals here</H>
+          <ul className="list-none m-0 p-0 flex flex-col gap-2">
+            {fests.map((f) => (
+              <li key={f.slug} className="p-3 rounded-xl bg-white">
+                <div className="flex flex-wrap items-baseline gap-x-2"><Link to={`/festivals?month=all${f.country !== 'India' ? '&scope=intl' : ''}&q=${encodeURIComponent(f.name)}`} className="font-bold">{f.name}</Link>
+                  <span className="text-sm font-semibold text-plum">{festivalDates(f) ?? festivalMonths(f)}</span></div>
+                {f.summary && <div className="text-sm mt-1">{f.summary}</div>}
+              </li>
+            ))}
+          </ul>
+          <p className="m-0 mt-2 text-xs text-muted">Festival dates can shift — please confirm locally before you travel.</p>
         </Section>
       )}
 

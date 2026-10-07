@@ -38,6 +38,14 @@ const SOURCES = {
     text: (r: Record<string, unknown>) => join(`${r.title}, a ${r.fiction === 0 ? 'non-fiction ' : r.fiction === 1 ? 'fiction ' : ''}book by ${r.author ?? 'unknown author'}`,
       parseJson<string[]>(r.genres, []).join(', '), r.topic && `About ${r.topic}`, r.pitch),
   },
+  festivals: {
+    prefix: 'f',
+    sql: 'SELECT id, status, updated_at, name, alt_names, country, state, towns, kind, months, summary, tips FROM festivals',
+    text: (r: Record<string, unknown>) => join(`${r.name} festival`, r.alt_names && `Also called ${r.alt_names}`, r.kind === 'religious' ? 'Religious festival' : r.kind === 'cultural' ? 'Cultural festival' : 'Religious and cultural festival',
+      [r.towns, r.state, r.country].filter(Boolean).join(', '),
+      String(r.months ?? '').split(',').map(Number).filter(Boolean).map((m) => MONTHS[m - 1]).join(', ') && `Celebrated in ${String(r.months).split(',').map(Number).filter(Boolean).map((m) => MONTHS[m - 1]).join(', ')}`,
+      r.summary, r.tips),
+  },
 } as const
 
 /** Process a batch of changed items per table. Returns how many were handled. */
@@ -82,6 +90,6 @@ export async function status(env: Env) {
   return json({ ai: !!env.AI, count: await count(env) })
 }
 export async function rebuild(env: Env) {
-  await env.DB.prepare("DELETE FROM meta WHERE key IN ('vec_places', 'vec_movies', 'vec_books')").run()
+  await env.DB.prepare("DELETE FROM meta WHERE key IN ('vec_places', 'vec_movies', 'vec_books', 'vec_festivals')").run()
   return json({ ok: true })
 }

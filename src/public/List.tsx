@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Footer } from './Layout'
 import { snippet } from './searchkit'
 import { useSemantic } from './useSemantic'
-import { loadIndex, loadMeta, makeSearch, openNow, placeUrl, where, MONTHS, ACCESS, VISIT, type IndexPlace, type Kind, type Meta } from './data'
+import { loadIndex, loadMeta, loadFestivals, festivalInMonth, type Festival, makeSearch, openNow, placeUrl, where, MONTHS, ACCESS, VISIT, type IndexPlace, type Kind, type Meta } from './data'
 
 const selectCls = 'h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-[15px]'
 
@@ -14,7 +14,8 @@ export default function List({ kind }: { kind: Kind }) {
   const [params, setParams] = useSearchParams()
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
-  useEffect(() => { loadIndex().then(setAll); loadMeta().then(setMeta) }, [])
+  const [fests, setFests] = useState<Festival[]>([])
+  useEffect(() => { loadIndex().then(setAll); loadMeta().then(setMeta); loadFestivals().then(setFests) }, [])
 
   const get = (k: string) => params.get(k) ?? ''
   const setF = (k: string, v: string) => { const p = new URLSearchParams(params); if (v) p.set(k, v); else p.delete(k); setParams(p, { replace: true }) }
@@ -38,6 +39,11 @@ export default function List({ kind }: { kind: Kind }) {
       && (!deity || p.deity === deity) && (!circuit || p.circuits.includes(circuit)))
   }, [mine, search, q, cat, region, month, visit, access, deity, circuit, scope])
   const activeFilters = [region, month, visit, access, deity, circuit].filter(Boolean).length
+  // Festivals this month for this section (cultural for Explore, religious for Darshan), following the India/International and state choice.
+  const nowM = new Date().getMonth() + 1
+  const festNow = fests.filter((f) => (scope === 'india' ? f.country === 'India' : f.country !== 'India')
+    && (!region || (scope === 'india' ? f.state : f.country) === region)
+    && (f.kind === 'both' || f.kind === (dark ? 'religious' : 'cultural')) && festivalInMonth(f, nowM))
   // Closest matches by meaning (online), limited to this section and not already listed above.
   const sem = useSemantic(q)
   const closest = useMemo(() => {
@@ -64,9 +70,18 @@ export default function List({ kind }: { kind: Kind }) {
         ))}
       </div>
 
+      {festNow.length > 0 && (
+        <Link to={`/festivals?month=${nowM}&type=${dark ? 'religious' : 'cultural'}${scope !== 'india' ? '&scope=intl' : ''}${region ? `&region=${encodeURIComponent(region)}` : ''}`}
+          className="mx-5 flex items-center gap-3 px-4 py-3 rounded-2xl bg-plum text-white no-underline text-sm">
+          <span aria-hidden="true">🎉</span>
+          <span className="flex-1 min-w-0 truncate"><b>{festNow.length} {festNow.length === 1 ? 'festival' : 'festivals'} this month{region ? ` in ${region}` : ''}</b> · {festNow.slice(0, 2).map((f) => f.name).join(', ')}</span>
+          <span aria-hidden="true">›</span>
+        </Link>
+      )}
+
       <div className="px-5 flex gap-2">
-        <label className="flex-1 flex items-center gap-2 h-12 px-4 bg-white border border-stone-300 rounded-2xl">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6B5E" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" /></svg>
+        <label className="flex-1 min-w-0 flex items-center gap-2 h-12 px-4 bg-white border border-stone-300 rounded-2xl">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6B5E" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" /></svg>
           <input type="search" aria-label="Search" placeholder={dark ? 'Temple, deity or town' : 'Place, state or keyword'} value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 bg-transparent outline-none text-base" />
         </label>
         <button onClick={() => setOpen(!open)} aria-expanded={open} className="h-12 px-4 rounded-2xl bg-white border border-stone-300 font-semibold">Filters{activeFilters ? ` (${activeFilters})` : ''}</button>

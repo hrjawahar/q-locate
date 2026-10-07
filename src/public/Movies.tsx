@@ -68,7 +68,7 @@ export default function Movies() {
 
       <div className="px-5 flex gap-2">
         <label className="flex-1 min-w-0 flex items-center gap-2 h-12 px-4 bg-white border border-stone-300 rounded-2xl">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6B5E" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" /></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6B5E" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" /></svg>
           <input type="search" aria-label="Search movies" placeholder="Title, country or mood" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-0 bg-transparent outline-none text-base" />
         </label>
         <button onClick={surprise} disabled={!shown.length} className="h-12 px-3 rounded-2xl bg-saffron text-maroon font-bold whitespace-nowrap text-sm disabled:opacity-50">Pick for me</button>

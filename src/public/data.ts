@@ -119,3 +119,39 @@ export function loadBooks(): Promise<Book[]> {
     .catch(async () => ((await get('books').catch(() => null)) as Book[] | undefined) ?? [])
   return booksPromise
 }
+
+// ---------- Festivals ----------
+export interface Festival {
+  slug: string; name: string; alt_names: string | null; country: string | null; state: string | null; towns: string | null
+  kind: 'religious' | 'cultural' | 'both' | null; months: number[]; next_start: string | null; next_end: string | null
+  dates_checked_on: string | null; summary: string | null; tips: string | null; places: { slug: string; kind: string; name: string }[]
+}
+let festivalsPromise: Promise<Festival[]> | null = null
+export function loadFestivals(): Promise<Festival[]> {
+  festivalsPromise ??= getJson<{ festivals: Festival[] }>('/api/festivals.json')
+    .then(async (d) => { await set('festivals', d.festivals).catch(() => {}); return d.festivals })
+    .catch(async () => ((await get('festivals').catch(() => null)) as Festival[] | undefined) ?? [])
+  return festivalsPromise
+}
+const todayIso = () => new Date().toISOString().slice(0, 10)
+const fmtDay = (d: string, withYear = true) => new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}) })
+/** Upcoming dates if known and not past, else null. */
+export const festivalDates = (f: Festival) => (f.next_start && (f.next_end ?? f.next_start) >= todayIso()
+  ? (f.next_end && f.next_end !== f.next_start
+    ? (f.next_start.slice(0, 7) === f.next_end.slice(0, 7) ? `${Number(f.next_start.slice(8, 10))} – ${fmtDay(f.next_end)}` : `${fmtDay(f.next_start, false)} – ${fmtDay(f.next_end)}`)
+    : fmtDay(f.next_start)) : null)
+/** "Usually in October" / "Usually Oct – Nov". */
+export const festivalMonths = (f: Festival) => (f.months.length ? `Usually in ${f.months.map((m) => MONTHS[m - 1]).join(', ')}` : '')
+/** Does the festival fall in this month (1-12)? Uses confirmed dates when there are any, else the usual months. */
+export function festivalInMonth(f: Festival, month: number) {
+  const d = festivalDates(f) ? [f.next_start!, f.next_end ?? f.next_start!] : null
+  if (d) { const a = Number(d[0].slice(5, 7)), b = Number(d[1].slice(5, 7)); return a <= b ? month >= a && month <= b : month >= a || month <= b }
+  return f.months.includes(month)
+}
+/** Sort key: soonest first (confirmed dates, then usual month from now). */
+export function festivalOrder(f: Festival) {
+  const now = new Date(), m = now.getMonth() + 1
+  if (festivalDates(f)) return (new Date(`${f.next_start}T00:00:00`).getTime() - now.getTime()) / 864e5
+  const ahead = f.months.map((x) => (x - m + 12) % 12)
+  return ahead.length ? Math.min(...ahead) * 30 + 15 : 9999
+}

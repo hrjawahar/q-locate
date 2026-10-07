@@ -31,7 +31,7 @@ export async function semantic(request: Request, env: Env & SearchBindings, ctx:
   if (q.length < 3) return json({ results: [] })
   if (!env.AI) return json({ results: [], off: true })
 
-  const versions = await env.DB.prepare("SELECT group_concat(key || '=' || value, ';') AS v FROM meta WHERE key IN ('index_version', 'movies_version', 'books_version', 'vec_version')").first<string>('v')
+  const versions = await env.DB.prepare("SELECT group_concat(key || '=' || value, ';') AS v FROM meta WHERE key IN ('index_version', 'movies_version', 'books_version', 'festivals_version', 'vec_version')").first<string>('v')
   const cacheKey = new Request(new URL(`/api/semantic?q=${encodeURIComponent(q)}&v=${encodeURIComponent(versions ?? '')}`, url).toString())
   const cached = await caches.default.match(cacheKey)
   if (cached) return cached
@@ -47,16 +47,18 @@ export async function semantic(request: Request, env: Env & SearchBindings, ctx:
   const list = async (sql: string, xs: number[]) => xs.length
     ? (await env.DB.prepare(sql.replace('?', xs.map(() => '?').join(','))).bind(...xs).all().catch(() => ({ results: [] }))).results
     : []
-  const [p, m, b] = await Promise.all([
+  const [p, m, b, fe] = await Promise.all([
     list("SELECT id, slug, kind FROM places WHERE status = 'published' AND id IN (?)", ids('p')),
     list("SELECT id, slug FROM movies WHERE status = 'published' AND id IN (?)", ids('m')),
     list("SELECT id, slug FROM books WHERE status = 'published' AND id IN (?)", ids('b')),
+    list("SELECT id, slug FROM festivals WHERE status = 'published' AND id IN (?)", ids('f')),
   ])
   const find = (rs: unknown[], id: number) => (rs as { id: number; slug: string; kind?: string }[]).find((r) => r.id === id)
   const results = matches.map((x) => {
     const id = Number(x.id.slice(2)), score = Math.round(x.score * 1000) / 1000
     if (x.id.startsWith('p:')) { const r = find(p, id); return r && { type: 'place', slug: r.slug, kind: r.kind, score } }
     if (x.id.startsWith('m:')) { const r = find(m, id); return r && { type: 'movie', slug: r.slug, score } }
+    if (x.id.startsWith('f:')) { const r = find(fe, id); return r && { type: 'festival', slug: r.slug, score } }
     const r = find(b, id); return r && { type: 'book', slug: r.slug, score }
   }).filter(Boolean)
 

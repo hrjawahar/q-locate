@@ -1,4 +1,4 @@
-import { km, where, fmtTime, ACCESS, VISIT, STAY, AMENITY, MONTHS, type Place } from './data'
+import { km, where, fmtTime, ACCESS, VISIT, STAY, AMENITY, MONTHS, festivalDates, festivalMonths, type Place, type Festival } from './data'
 
 type RGB = [number, number, number]
 const INK: RGB = [30, 42, 34], MUTED: RGB = [91, 107, 94]
@@ -20,7 +20,7 @@ async function photoData(url: string): Promise<{ data: string; w: number; h: num
   } catch { return null }
 }
 
-export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: string) {
+export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: string, fests: Festival[] = []) {
   const [{ jsPDF }, QR] = await Promise.all([import('jspdf'), import('qrcode').then((m) => m.default)])
   const dark = p.kind === 'spiritual'
   const ACC: RGB = dark ? [107, 30, 42] : [46, 91, 60]
@@ -88,6 +88,12 @@ export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: strin
     if (d.darshan_hours?.length) row('Darshan hours', d.darshan_hours.map((h: Place) => `${fmtTime(h.open)} - ${fmtTime(h.close)}`).join(', '))
     row('Dress code', d.dress_code); row('Festivals', d.festivals); row('Prasadam', d.prasadam); row('Photography', d.photography); row('Significance', d.significance)
     ;(p.circuits ?? []).forEach((c: Place) => row('Circuit', `${c.name}${c.position ? ` - no. ${c.position}` : ''}`))
+  }
+
+  if (fests.length) {
+    heading('Festivals here')
+    fests.forEach((f) => bullet(`${f.name} - ${festivalDates(f) ?? festivalMonths(f)}`, f.summary))
+    text('Festival dates can shift - please confirm locally before you travel.', 8.5, 'normal', MUTED)
   }
 
   if ((p.transport ?? []).length || p.how_to_reach) {

@@ -20,6 +20,7 @@ export async function list(url: URL, env: AdminEnv) {
   const q = url.searchParams.get('q')?.trim() ?? '', status = url.searchParams.get('status') ?? ''
   const where: string[] = [], b: unknown[] = []
   if (status === 'stale') where.push("f.status = 'published' AND (f.next_end IS NULL OR f.next_end < date('now'))")
+  else if (status === 'datescheck') where.push("f.ai_pending LIKE '%dates%'")
   else if (status) { where.push('f.status = ?'); b.push(status) }
   for (const w of q.split(/\s+/).filter((x) => x.length > 1).slice(0, 5)) { where.push("(f.name || ' ' || COALESCE(f.alt_names,'') || ' ' || COALESCE(f.state,'') || ' ' || COALESCE(f.country,'') || ' ' || COALESCE(f.towns,'')) LIKE ?"); b.push(`%${w}%`) }
   const { results } = await env.DB.prepare(`SELECT f.id, f.name, f.country, f.state, f.kind, f.months, f.next_start, f.next_end, f.status, f.ai_pending, f.updated_at
@@ -160,22 +161,86 @@ Return JSON:
   }
 }
 
-/** Ask the AI for the next dates only; saved as a draft change for the editor to check. */
-export async function refreshDates(id: number, env: Env, a: Admin) {
-  const f = await env.DB.prepare('SELECT name, country, state, months, ai_pending, status FROM festivals WHERE id = ?').bind(id).first<Record<string, unknown>>()
-  if (!f) return json({ error: 'not_found' }, { status: 404 })
-  if (f.status === 'published' && !canPublish(a)) return json({ error: 'Only a publisher or owner can change a published festival' }, { status: 403 })
-  if (!env.ANTHROPIC_API_KEY) return json({ error: 'AI is off (no ANTHROPIC_API_KEY)' }, { status: 400 })
+/** Ask the AI for the next dates only; saved as a change for the editor to check (users keep seeing the usual month until then). */
+async function refreshCore(id: number, env: Env, actor: string): Promise<{ ok: boolean; same?: boolean; note?: string; next_start?: string; next_end?: string | null; refs?: { url: string; title: string }[] }> {
+  const f = await env.DB.prepare('SELECT name, country, state, months, ai_pending, status, next_start, next_end FROM festivals WHERE id = ?').bind(id).first<Record<string, unknown>>()
+  if (!f) return { ok: false, note: 'Festival not found' }
   const { raw, refs } = await ask(env, `TODAY is ${today()}.
 Festival: ${f.name} — ${[f.state, f.country].filter(Boolean).join(', ')} (usually in months ${f.months ?? 'unknown'}).
 Return JSON: {${DATES}}`)
   const start = isoDate(raw.next_start), end = isoDate(raw.next_end) ?? start
-  if (!start || (end && end < today())) return json({ ok: false, note: 'No confirmed upcoming dates found yet — try again closer to the season.' })
+  if (!start || (end && end < today())) return { ok: false, note: 'No confirmed upcoming dates found yet — try again closer to the season.' }
+  // Same dates as already confirmed: just note the check, don't ask for re-approval.
+  if (start === f.next_start && end === (f.next_end ?? f.next_start) && !parseJson<string[]>(f.ai_pending, []).includes('dates')) {
+    await env.DB.prepare("UPDATE festivals SET dates_checked_on = date('now') WHERE id = ?").bind(id).run()
+    return { ok: true, same: true, next_start: start, next_end: end, refs }
+  }
   const pending = new Set(parseJson<string[]>(f.ai_pending, [])); pending.add('dates')
   await env.DB.batch([
     env.DB.prepare(`UPDATE festivals SET next_start = ?, next_end = ?, dates_checked_on = date('now'), refs = ?, ai_pending = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
-      .bind(start, end, JSON.stringify(refs), JSON.stringify([...pending]), a.email, id),
-    audit(env, a, 'refresh_dates', id), ...(f.status === 'published' ? [bump(env)] : []),
+      .bind(start, end, JSON.stringify(refs), JSON.stringify([...pending]), actor, id),
+    env.DB.prepare("INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'refresh_dates', 'festival', ?)").bind(actor, String(id)),
+    ...(f.status === 'published' ? [bump(env)] : []),
   ])
-  return json({ ok: true, next_start: start, next_end: end, refs })
+  return { ok: true, next_start: start, next_end: end, refs }
+}
+
+export async function refreshDates(id: number, env: Env, a: Admin) {
+  const f = await env.DB.prepare('SELECT status FROM festivals WHERE id = ?').bind(id).first<{ status: string }>()
+  if (!f) return json({ error: 'not_found' }, { status: 404 })
+  if (f.status === 'published' && !canPublish(a)) return json({ error: 'Only a publisher or owner can change a published festival' }, { status: 403 })
+  if (!env.ANTHROPIC_API_KEY) return json({ error: 'AI is off (no ANTHROPIC_API_KEY)' }, { status: 400 })
+  return json(await refreshCore(id, env, a.email))
+}
+
+// ---------- Refresh all: a small background queue kept in the meta table, worked through by the cron ----------
+interface RefreshJob { ids: number[]; total: number; done: number; found: number; same?: number; none: number; failed: number; started: string; by: string }
+const JOB = 'fest_refresh'
+const readJob = async (env: AdminEnv) => parseJson<RefreshJob | null>(await env.DB.prepare('SELECT value FROM meta WHERE key = ?').bind(JOB).first<string>('value'), null)
+const writeJob = (env: AdminEnv, j: RefreshJob) => env.DB.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(JOB, JSON.stringify(j)).run()
+
+async function startJob(env: AdminEnv, by: string) {
+  const { results } = await env.DB.prepare("SELECT id FROM festivals WHERE status = 'published' ORDER BY COALESCE(next_end, '0000') , name").all<{ id: number }>()
+  const j: RefreshJob = { ids: results.map((r) => r.id), total: results.length, done: 0, found: 0, same: 0, none: 0, failed: 0, started: new Date().toISOString(), by }
+  await writeJob(env, j)
+  return j
+}
+
+export async function refreshAll(env: Env, a: Admin) {
+  if (!canPublish(a)) return json({ error: 'Only a publisher or owner can refresh dates' }, { status: 403 })
+  if (!env.ANTHROPIC_API_KEY) return json({ error: 'AI is off (no ANTHROPIC_API_KEY)' }, { status: 400 })
+  const cur = await readJob(env)
+  if (cur && cur.ids.length) return json({ job: cur, note: 'Already running' })
+  return json({ job: await startJob(env, a.email) })
+}
+export async function refreshStatus(env: AdminEnv) {
+  const pending = await env.DB.prepare("SELECT count(*) AS n FROM festivals WHERE ai_pending LIKE '%dates%'").first<number>('n').catch(() => 0)
+  return json({ job: await readJob(env), datesToCheck: pending })
+}
+
+/** Cron: work through a couple of festivals per minute; also starts a run by itself on the 1st of each month. */
+export async function processRefresh(env: Env, max = 2) {
+  if (!env.ANTHROPIC_API_KEY) return
+  let j = await readJob(env).catch(() => null)
+  const now = new Date(), month = now.toISOString().slice(0, 7)
+  if (now.getUTCDate() === 1 && (!j || !j.ids.length)) {
+    const last = await env.DB.prepare("SELECT value FROM meta WHERE key = 'fest_auto_month'").first<string>('value').catch(() => null)
+    if (last !== month) {
+      await env.DB.prepare("INSERT INTO meta (key, value) VALUES ('fest_auto_month', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(month).run()
+      j = await startJob(env, 'monthly check')
+    }
+  }
+  if (!j || !j.ids.length) return
+  // Claim the next items first so an overlapping run doesn't repeat them.
+  const take = j.ids.slice(0, max)
+  j.ids = j.ids.slice(max)
+  await writeJob(env, j)
+  const d = { done: 0, found: 0, same: 0, none: 0, failed: 0 }
+  for (const id of take) {
+    try { const r = await refreshCore(id, env, j.by); if (r.same) d.same++; else if (r.ok) d.found++; else d.none++ } catch { d.failed++ }
+    d.done++
+  }
+  // Add this run's counts to the latest saved job (another run may have updated it meanwhile).
+  const latest = (await readJob(env)) ?? j
+  await writeJob(env, { ...latest, done: latest.done + d.done, found: latest.found + d.found, same: (latest.same ?? 0) + d.same, none: latest.none + d.none, failed: latest.failed + d.failed })
 }

@@ -19,6 +19,8 @@ export default {
     ctx.waitUntil(imp.processNext(env, Math.max(1, Number(env.IMPORT_BATCH) || 2)))
     // Keep meaning-search fingerprints in step with what is published.
     ctx.waitUntil(vectors.sync(env).catch((e) => console.log('vector sync', (e as Error).message)))
+    // Festival dates: "Refresh all" runs (and the automatic run on the 1st of each month).
+    ctx.waitUntil(festivals.processRefresh(env).catch((e) => console.log('festival refresh', (e as Error).message)))
   },
 
   async fetch(request, env, ctx) {
@@ -56,6 +58,8 @@ export default {
         if (pathname === '/api/admin/festivals' && m === 'GET') return festivals.list(url, env)
         if (pathname === '/api/admin/festivals' && m === 'POST') return festivals.save(null, await body(), env, admin)
         if (pathname === '/api/admin/festivals/fill' && m === 'POST') return festivals.fill(await body(), env)
+        if (pathname === '/api/admin/festivals/refresh' && m === 'GET') return festivals.refreshStatus(env)
+        if (pathname === '/api/admin/festivals/refresh' && m === 'POST') return festivals.refreshAll(env, admin)
         if (fm && !fm[2] && m === 'GET') return festivals.get(Number(fm[1]), env)
         if (fm && !fm[2] && m === 'PUT') return festivals.save(Number(fm[1]), await body(), env, admin)
         if (fm && !fm[2] && m === 'DELETE') return festivals.remove(Number(fm[1]), env, admin)

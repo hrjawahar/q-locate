@@ -15,6 +15,7 @@ interface Draft {
   refs: { url: string; title: string }[]; ai_pending?: string[]; status?: string
 }
 interface Row { id: number; name: string; country: string | null; state: string | null; kind: string | null; months: string | null; next_start: string | null; next_end: string | null; status: string; ai_pending: string | null }
+interface Job { ids: number[]; total: number; done: number; found: number; same?: number; none: number; failed: number; started: string; by: string }
 interface PlaceRef { id: number; name: string; kind: string; state: string | null; country: string | null }
 
 async function addOne(name: string, country: string, note: string): Promise<{ id: number; existed: boolean }> {
@@ -31,6 +32,14 @@ export function FestivalsList({ me }: { me: Me }) {
   const [bulk, setBulk] = useState(''), [showBulk, setShowBulk] = useState(false)
   const [busy, setBusy] = useState(''), [msg, setMsg] = useState('')
   const nav = useNavigate()
+  const [job, setJob] = useState<{ job: Job | null; datesToCheck: number } | null>(null)
+  const loadJob = () => api<{ job: Job | null; datesToCheck: number }>('/festivals/refresh').then(setJob).catch(() => {})
+  useEffect(() => { loadJob(); const t = setInterval(loadJob, 20000); return () => clearInterval(t) }, [])
+  const running = !!job?.job?.ids.length
+  const refreshAll = async () => {
+    if (!confirm('Look up the latest dates for every published festival?\n\nThis runs in the background (about 2 festivals a minute) — you can close the browser. New dates stay hidden from users until you check them.')) return
+    try { const r = await api<{ job: Job }>('/festivals/refresh', { method: 'POST' }); setJob({ job: r.job, datesToCheck: job?.datesToCheck ?? 0 }) } catch (e) { setMsg((e as Error).message) }
+  }
   const load = () => api<{ festivals: Row[] }>(`/festivals?${new URLSearchParams({ q, status })}`).then((d) => setRows(d.festivals)).catch(() => setRows([]))
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t) }, [q, status]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -82,10 +91,26 @@ export function FestivalsList({ me }: { me: Me }) {
         {msg && <p className="m-0 text-sm" role="status">{msg}</p>}
       </div>
 
+      <div className="p-4 rounded-xl border border-stone-200 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="m-0 text-lg font-semibold flex-1">Festival dates</h2>
+          {me.role !== 'editor' && <button className={hot} disabled={running} onClick={refreshAll}>{running ? 'Refreshing…' : 'Refresh all dates'}</button>}
+        </div>
+        {job?.job && (
+          <div className="flex flex-col gap-1 text-sm">
+            <div>{running ? `Working: ${job.job.done} of ${job.job.total} checked` : `Last run (${new Date(job.job.started).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}${job.job.by === 'monthly check' ? ', automatic' : ''}): ${job.job.done} of ${job.job.total} checked`}
+              {' '}· <b>{job.job.found}</b> new dates · {job.job.same ?? 0} unchanged · {job.job.none} not announced yet{job.job.failed ? ` · ${job.job.failed} failed` : ''}</div>
+            {running && <div className="h-2 rounded-full bg-stone-200 overflow-hidden"><div className="h-full bg-plum" style={{ width: `${job.job.total ? (job.job.done / job.job.total) * 100 : 0}%` }} /></div>}
+          </div>
+        )}
+        {(job?.datesToCheck ?? 0) > 0 && <button className="self-start text-sm font-semibold underline" onClick={() => setStatus('datescheck')}>{job!.datesToCheck} {job!.datesToCheck === 1 ? 'festival has' : 'festivals have'} new dates to check →</button>}
+        <p className="m-0 text-xs text-muted">Runs automatically on the 1st of every month too. New dates appear to users only after you open the festival and tick “I’ve checked it”.</p>
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <input className={`${inp} flex-1 min-w-48`} placeholder="Search name, state, country, town" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className={`${inp} w-auto`} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All</option><option value="draft">Drafts</option><option value="published">Published</option><option value="stale">Published — dates need updating</option><option value="archived">Archived</option></select>
+          <option value="">All</option><option value="draft">Drafts</option><option value="published">Published</option><option value="datescheck">New dates to check</option><option value="stale">Published — dates need updating</option><option value="archived">Archived</option></select>
       </div>
       {!rows ? <p>Loading…</p> : rows.length === 0 ? <p className="text-muted">No festivals yet.</p> : (
         <ul className="list-none m-0 p-0 flex flex-col divide-y divide-stone-200 border border-stone-200 rounded-xl">
@@ -147,8 +172,9 @@ export function FestivalForm({ me }: { me: Me }) {
     setBusy(true); setMsg({ text: 'Looking up the next dates… (up to a minute)', ok: true })
     try {
       await api(`/festivals/${id}`, { method: 'PUT', json: payload() })
-      const r = await api<{ ok: boolean; note?: string; next_start?: string; next_end?: string; refs?: Draft['refs'] }>(`/festivals/${id}/dates`, { method: 'POST' })
-      if (r.ok) { setF({ ...f, next_start: r.next_start!, next_end: r.next_end!, dates_checked_on: today(), refs: r.refs ?? f.refs, ai_pending: [...new Set([...(f.ai_pending ?? []), 'dates'])] }); setMsg({ text: 'New dates found — check them against the pages below, then confirm.', ok: true }) }
+      const r = await api<{ ok: boolean; same?: boolean; note?: string; next_start?: string; next_end?: string; refs?: Draft['refs'] }>(`/festivals/${id}/dates`, { method: 'POST' })
+      if (r.same) { setF({ ...f, dates_checked_on: today() }); setMsg({ text: 'Same dates as before — nothing new to check.', ok: true }) }
+      else if (r.ok) { setF({ ...f, next_start: r.next_start!, next_end: r.next_end!, dates_checked_on: today(), refs: r.refs ?? f.refs, ai_pending: [...new Set([...(f.ai_pending ?? []), 'dates'])] }); setMsg({ text: 'New dates found — check them against the pages below, then confirm.', ok: true }) }
       else setMsg({ text: r.note ?? 'No dates found' })
     } catch (e) { setMsg({ text: (e as Error).message }) }
     setBusy(false)

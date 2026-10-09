@@ -35,14 +35,14 @@ export default function Makers() {
   const [q, setQ] = useState(params.get('q') ?? '')
   const cat = params.get('cat') ?? '', region = params.get('region') ?? ''
   const setF = (k: string, v: string) => { const p = new URLSearchParams(params); if (v) p.set(k, v); else p.delete(k); setParams(p, { replace: true }) }
-  useEffect(() => { loadMakers().then(setAll); document.title = 'Local Makers — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
+  useEffect(() => { loadMakers().then(setAll); document.title = 'Vocal for Local — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const cats = useMemo(() => [...new Set((all ?? []).map((m) => m.category).filter(Boolean) as string[])].sort(), [all])
   const regions = useMemo(() => [...new Set((all ?? []).map((m) => m.state).filter(Boolean) as string[])].sort(), [all])
   const ms = useMemo(() => {
-    const s = new MiniSearch<Maker>({ idField: 'slug', fields: ['name', 'products', 'category', 'village', 'district', 'state', 'country', 'about'], storeFields: ['slug'], processTerm,
+    const s = new MiniSearch<Maker & { tag?: string }>({ idField: 'slug', fields: ['name', 'products', 'category', 'village', 'district', 'state', 'country', 'about', 'tag'], storeFields: ['slug'], processTerm,
       searchOptions: { prefix: true, fuzzy: 0.15, boost: { products: 3, name: 2, village: 2, district: 2 } } })
-    s.addAll(all ?? []); return s
+    s.addAll((all ?? []).map((m) => ({ ...m, tag: 'vocal for local village products handmade' }))); return s
   }, [all])
   const shown = useMemo(() => {
     let xs = all ?? []
@@ -60,8 +60,8 @@ export default function Makers() {
       <header className="px-5 flex items-center gap-3">
         <Link to="/" aria-label="Back to home" className="w-11 h-11 -ml-2 grid place-items-center rounded-full text-ink no-underline text-2xl">‹</Link>
         <div>
-          <h1 className="m-0 font-display text-3xl font-bold tracking-tight text-indigo">Local Makers</h1>
-          <p className="m-0 text-sm text-muted">Farmers, weavers and artisans — contact them directly</p>
+          <h1 className="m-0 font-display text-3xl font-bold tracking-tight text-indigo">Vocal for Local</h1>
+          <p className="m-0 text-sm text-muted">Buy direct from village farmers, weavers & artisans</p>
         </div>
       </header>
       <label className="mx-5 flex items-center gap-2 h-12 px-4 bg-white border border-stone-300 rounded-2xl">
@@ -80,7 +80,7 @@ export default function Makers() {
       )}
       <p className="m-0 px-5 text-sm text-muted" role="status">{all === null ? 'Loading…' : `${shown.length} ${shown.length === 1 ? 'maker' : 'makers'}`}</p>
       {all !== null && shown.length === 0 && closest.length === 0 && (
-        <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">{all.length ? 'No makers match.' : 'Local Makers are being added. Check back soon.'}</p></div>
+        <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">{all.length ? 'No makers match.' : 'Village products are being added. Check back soon.'}</p></div>
       )}
       <ul className="list-none m-0 px-5 flex flex-col gap-3">{shown.map((m) => <MakerCard key={m.slug} m={m} />)}</ul>
       {closest.length > 0 && (

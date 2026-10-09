@@ -34,7 +34,7 @@ export default function Home() {
       m: mk(movies, ['title', 'g', 'doc_topic', 'pitch', 'country', 'language', 'who'], (m) => ({ ...m, g: m.genres.join(' '), who: m.recs.map((r) => r.handle ?? '').join(' ') })),
       b: mk(books, ['title', 'author', 'g', 'topic', 'pitch', 'language', 'who'], (b) => ({ ...b, g: b.genres.join(' '), who: b.recs.map((r) => r.handle ?? '').join(' ') })),
       f: mk(fests, ['title', 'alt_names', 'state', 'country', 'towns', 'summary', 'mo'], (f) => ({ ...f, title: f.name, mo: f.months.map((x) => `${FULL_MONTHS[x - 1]} ${MONTHS_SHORT[x - 1]}`).join(' ') })),
-      k: mk(makers, ['title', 'products', 'category', 'village', 'district', 'state'], (m) => ({ ...m, title: m.name })),
+      k: mk(makers, ['title', 'products', 'category', 'village', 'district', 'state', 'tag'], (m) => ({ ...m, title: m.name, tag: 'vocal for local village products handmade' })),
     }
   }, [movies, books, fests, makers])
   const pickHits = q.trim().length >= 2 ? [
@@ -127,7 +127,7 @@ export default function Home() {
       })()}
       <Link to="/makers" className="flex items-center gap-4 p-4 rounded-3xl bg-indigo text-white no-underline">
         <span className="w-11 h-11 shrink-0 rounded-xl bg-white/10 grid place-items-center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F2B35C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 10l9-6 9 6M5 10v10h14V10M9 20v-6h6v6" /></svg></span>
-        <span className="flex-1 min-w-0"><span className="block font-display text-xl font-bold">Local Makers</span><span className="block text-sm text-white/80 truncate">Farmers, weavers and artisans near your trip</span></span>
+        <span className="flex-1 min-w-0"><span className="block font-display text-xl font-bold">Vocal for Local</span><span className="block text-sm text-white/80 truncate">Buy direct from village farmers, weavers & artisans</span></span>
         <span aria-hidden="true" className="text-2xl">›</span>
       </Link>
 

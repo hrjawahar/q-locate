@@ -127,7 +127,7 @@ export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: strin
   }
 
   if (makers.length) {
-    heading('Made nearby')
+    heading('Vocal for Local - nearby')
     makers.forEach((m) => bullet(`${m.name} (${m.village ?? ''}) - ${m.products ?? ''}`, m.phone))
     text('Listed for information; Q-Locate does not sell or handle payments.', 8.5, 'normal', MUTED)
   }

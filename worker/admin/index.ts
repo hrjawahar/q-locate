@@ -54,7 +54,7 @@ export default {
       if (pathname === '/api/admin/search/rebuild' && m === 'POST' && admin.role === 'owner') return vectors.rebuild(env)
       if (pathname === '/api/admin/search/sync' && m === 'POST' && admin.role !== 'editor') return json({ done: await vectors.sync(env) })
       if (pathname.startsWith('/api/admin/makers')) {
-        if (admin.scope !== 'all') return json({ error: 'Local Makers needs an admin with access to all sections' }, { status: 403 })
+        if (admin.scope !== 'all') return json({ error: 'Vocal for Local needs an admin with access to all sections' }, { status: 403 })
         const km = pathname.match(/^\/api\/admin\/makers\/(\d+)(\/(status))?$/)
         if (pathname === '/api/admin/makers' && m === 'GET') return makers.list(url, env)
         if (pathname === '/api/admin/makers' && m === 'POST') return makers.save(null, await body(), env, admin)

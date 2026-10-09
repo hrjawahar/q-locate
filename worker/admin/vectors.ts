@@ -49,7 +49,7 @@ const SOURCES = {
   makers: {
     prefix: 'k',
     sql: "SELECT id, CASE WHEN consent = 1 THEN status ELSE 'draft' END AS status, updated_at, name, products, category, village, district, state, country, about FROM makers",
-    text: (r: Record<string, unknown>) => join(`${r.name}, local maker`, r.category, r.products && `Sells ${r.products}`, [r.village, r.district, r.state, r.country].filter(Boolean).join(', '), r.about),
+    text: (r: Record<string, unknown>) => join(`${r.name}, local maker (Vocal for Local)`, r.category, r.products && `Sells ${r.products}`, [r.village, r.district, r.state, r.country].filter(Boolean).join(', '), r.about),
   },
 } as const
 

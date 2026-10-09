@@ -21,7 +21,7 @@ export function MakersList({ me }: { me: Me }) {
   return (
     <section className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="m-0 font-display text-2xl font-bold flex-1">Local Makers</h1>
+        <h1 className="m-0 font-display text-2xl font-bold flex-1">Vocal for Local</h1>
         <Link to="/admin/makers/new" className="h-11 px-4 grid place-items-center rounded-lg font-semibold bg-forest text-white no-underline">+ Add maker</Link>
       </div>
       <p className="m-0 text-sm text-muted">Farmers, weavers and artisans: product, village, category and contact number. Information only — users contact the maker directly.</p>
@@ -68,7 +68,7 @@ export function MakerForm({ me }: { me: Me }) {
   const status = async (s: string) => {
     const mid = await save(); if (!mid) return
     setBusy(true)
-    try { await api(`/makers/${mid}/status`, { method: 'POST', json: { status: s } }); setM({ ...m, status: s }); setMsg({ text: s === 'published' ? 'Published — it’s live in Local Makers' : 'Updated', ok: true }) }
+    try { await api(`/makers/${mid}/status`, { method: 'POST', json: { status: s } }); setM({ ...m, status: s }); setMsg({ text: s === 'published' ? 'Published — it’s live in Vocal for Local' : 'Updated', ok: true }) }
     catch (e) { setMsg({ text: (e as Error).message }) }
     setBusy(false)
   }
@@ -78,7 +78,7 @@ export function MakerForm({ me }: { me: Me }) {
 
   return (
     <section className="flex flex-col gap-5 max-w-3xl">
-      <Link to="/admin/makers" className="text-sm">← Local Makers</Link>
+      <Link to="/admin/makers" className="text-sm">← Vocal for Local</Link>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="m-0 font-display text-2xl font-bold flex-1">{m.name || 'New maker'}</h1>
         {!isNew && <span className={`text-xs font-semibold px-2 py-1 rounded-full ${ST[st][1]}`}>{ST[st][0]}</span>}
@@ -98,7 +98,7 @@ export function MakerForm({ me }: { me: Me }) {
         <input type="checkbox" className="w-5 h-5" checked={m.consent} onChange={(e) => set('consent', e.target.checked)} />
         The maker agreed to be listed, including their contact number *
       </label>
-      <p className="m-0 text-xs text-muted">The district is used to show this maker on place pages in the same district (“Made nearby”).</p>
+      <p className="m-0 text-xs text-muted">The district is used to show this maker on place pages in the same district (“Vocal for Local — nearby”).</p>
       <div className="flex flex-wrap gap-2 items-center py-3 border-t border-stone-200">
         <button className={btn} disabled={busy} onClick={save}>Save</button>
         {canPub && st !== 'published' && <button className="h-11 px-4 rounded-lg font-semibold bg-saffron text-maroon disabled:opacity-50" disabled={busy} onClick={() => status('published')}>Publish</button>}

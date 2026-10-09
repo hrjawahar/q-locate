@@ -56,7 +56,7 @@ export default function AdminApp() {
             {me.role !== 'editor' && (me.scope === 'all' || me.scope === 'spiritual') && <NavLink to="/admin/tracker" className={link}>Temple tracker</NavLink>}
             {me.scope === 'all' && <NavLink to="/admin/movies" className={link}>Movie Picks</NavLink>}
             {me.scope === 'all' && <NavLink to="/admin/festivals" className={link}>Festivals</NavLink>}
-            {me.scope === 'all' && <NavLink to="/admin/makers" className={link}>Local Makers</NavLink>}
+            {me.scope === 'all' && <NavLink to="/admin/makers" className={link}>Vocal for Local</NavLink>}
             {me.scope === 'all' && <NavLink to="/admin/books" className={link}>Book Picks</NavLink>}
             {me.role !== 'editor' && <NavLink to="/admin/activity" className={link}>Activity</NavLink>}
             {me.role === 'owner' && <NavLink to="/admin/users" className={link}>Admins</NavLink>}

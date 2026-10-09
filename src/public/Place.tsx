@@ -201,7 +201,7 @@ export default function PlacePage() {
       )}
 
       {makers.length > 0 && (
-        <Section><H dark={dark}>Made nearby</H>
+        <Section><H dark={dark}>Vocal for Local — nearby</H>
           <ul className="list-none m-0 p-0 flex flex-col gap-2">
             {makers.map((m) => (
               <li key={m.slug} className="p-3 rounded-xl bg-white flex flex-wrap items-center gap-x-3 gap-y-1">

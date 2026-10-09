@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
 import { Footer } from './Layout'
 import MiniSearch from 'minisearch'
-import { loadIndex, loadMovies, loadBooks, loadFestivals, festivalInMonth, festivalOrder, makeSearch, savedPlaces, placeUrl, where, type IndexPlace, type Place, type Movie, type Book, type Festival } from './data'
+import { loadIndex, loadMovies, loadBooks, loadFestivals, loadMakers, type Maker, festivalInMonth, festivalOrder, makeSearch, savedPlaces, placeUrl, where, type IndexPlace, type Place, type Movie, type Book, type Festival } from './data'
 import { CONFIG } from './config'
 import { snippet, processTerm, expand } from './searchkit'
 
@@ -19,7 +19,8 @@ export default function Home() {
   const [movies, setMovies] = useState<Movie[]>([])
   const [books, setBooks] = useState<Book[]>([])
   const [fests, setFests] = useState<Festival[]>([])
-  useEffect(() => { loadIndex().then(setPlaces); savedPlaces().then(setSaved); loadMovies().then(setMovies); loadBooks().then(setBooks); loadFestivals().then(setFests) }, [])
+  const [makers, setMakers] = useState<Maker[]>([])
+  useEffect(() => { loadIndex().then(setPlaces); savedPlaces().then(setSaved); loadMovies().then(setMovies); loadBooks().then(setBooks); loadFestivals().then(setFests); loadMakers().then(setMakers) }, [])
   const search = useMemo(() => makeSearch(places), [places])
   const bySlug = useMemo(() => new Map(places.map((p) => [p.slug, p])), [places])
   const results = q.trim().length >= 2 ? search(q).slice(0, 8).map((s) => bySlug.get(s)!).filter(Boolean) : []
@@ -33,12 +34,14 @@ export default function Home() {
       m: mk(movies, ['title', 'g', 'doc_topic', 'pitch', 'country', 'language', 'who'], (m) => ({ ...m, g: m.genres.join(' '), who: m.recs.map((r) => r.handle ?? '').join(' ') })),
       b: mk(books, ['title', 'author', 'g', 'topic', 'pitch', 'language', 'who'], (b) => ({ ...b, g: b.genres.join(' '), who: b.recs.map((r) => r.handle ?? '').join(' ') })),
       f: mk(fests, ['title', 'alt_names', 'state', 'country', 'towns', 'summary', 'mo'], (f) => ({ ...f, title: f.name, mo: f.months.map((x) => `${FULL_MONTHS[x - 1]} ${MONTHS_SHORT[x - 1]}`).join(' ') })),
+      k: mk(makers, ['title', 'products', 'category', 'village', 'district', 'state'], (m) => ({ ...m, title: m.name })),
     }
-  }, [movies, books, fests])
+  }, [movies, books, fests, makers])
   const pickHits = q.trim().length >= 2 ? [
     ...picks.m.search(expand(q)).slice(0, 3).map((r) => ({ kind: 'Movie', title: movies.find((m) => m.slug === r.id)?.title ?? '', to: `/movies?q=${encodeURIComponent(q)}` })),
     ...picks.b.search(expand(q)).slice(0, 3).map((r) => ({ kind: 'Book', title: books.find((b) => b.slug === r.id)?.title ?? '', to: `/books?q=${encodeURIComponent(q)}` })),
     ...picks.f.search(expand(q)).slice(0, 4).map((r) => { const f = fests.find((x) => x.slug === r.id); return { kind: 'Festival', title: f?.name ?? '', to: `/festivals?month=all${f && f.country !== 'India' ? '&scope=intl' : ''}&q=${encodeURIComponent(f?.name ?? q)}` } }),
+    ...picks.k.search(expand(q)).slice(0, 3).map((r) => { const m = makers.find((x) => x.slug === r.id); return { kind: 'Maker', title: m ? `${m.name} · ${m.products ?? ''}` : '', to: `/makers?q=${encodeURIComponent(m?.name ?? q)}` } }),
   ] : []
   // Closest matches by meaning (online): things the exact words above didn't find.
   const sem = useSemantic(q)
@@ -46,6 +49,7 @@ export default function Home() {
   const shownSlugs = new Set([...results.map((p) => p.slug), ...pickHits.map((h) => h.title)])
   const closest = sem.map((h) => {
     if (h.type === 'place') { const p = bySlug.get(h.slug); return p && !shownSlugs.has(p.slug) ? { key: `p${p.slug}`, badge: p.kind === 'spiritual' ? 'Darshan' : 'Explore', dark: p.kind === 'spiritual', title: p.name, sub: where(p), to: placeUrl(p) } : null }
+    if (h.type === 'maker') { const m = makers.find((x) => x.slug === h.slug); return m && !shownSlugs.has(`${m.name} · ${m.products ?? ''}`) ? { key: `k${m.slug}`, badge: 'Maker', dark: false, title: m.name, sub: [m.products, m.village].filter(Boolean).join(' · '), to: `/makers?q=${encodeURIComponent(m.name)}` } : null }
     if (h.type === 'festival') { const f = fests.find((x) => x.slug === h.slug); return f && !shownSlugs.has(f.name) ? { key: `f${f.slug}`, badge: 'Festival', dark: false, title: f.name, sub: [f.state, f.country].filter(Boolean).join(', '), to: `/festivals?month=all${f.country !== 'India' ? '&scope=intl' : ''}&q=${encodeURIComponent(f.name)}` } : null }
     const x = h.type === 'movie' ? movies.find((m) => m.slug === h.slug) : books.find((b) => b.slug === h.slug)
     return x && !shownSlugs.has(x.title) ? { key: `${h.type}${x.slug}`, badge: h.type === 'movie' ? 'Movie' : 'Book', dark: false, title: x.title, sub: '', to: `/${h.type}s?q=${encodeURIComponent(x.title)}` } : null
@@ -78,14 +82,14 @@ export default function Home() {
             ))}
             {pickHits.map((h, i) => (
               <li key={`p${i}`}><Link to={h.to} className="flex items-center gap-3 px-4 py-3 no-underline text-ink hover:bg-stone-50">
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${h.kind === 'Festival' ? 'bg-plum text-white' : 'bg-ink text-white'}`}>{h.kind}</span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${h.kind === 'Festival' ? 'bg-plum text-white' : h.kind === 'Maker' ? 'bg-indigo text-white' : 'bg-ink text-white'}`}>{h.kind}</span>
                 <span className="flex-1 min-w-0 font-semibold truncate">{h.title}</span>
               </Link></li>
             ))}
             {closest.length > 0 && <li className="px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted border-t border-stone-200">Closest matches</li>}
             {closest.map((c) => (
               <li key={c.key}><Link to={c.to} className="flex items-center gap-3 px-4 py-3 no-underline text-ink hover:bg-stone-50">
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${c.badge === 'Darshan' ? 'bg-saffron/20 text-maroon' : c.badge === 'Explore' ? 'bg-forest/10 text-forest' : c.badge === 'Festival' ? 'bg-plum text-white' : 'bg-ink text-white'}`}>{c.badge}</span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${c.badge === 'Darshan' ? 'bg-saffron/20 text-maroon' : c.badge === 'Explore' ? 'bg-forest/10 text-forest' : c.badge === 'Festival' ? 'bg-plum text-white' : c.badge === 'Maker' ? 'bg-indigo text-white' : 'bg-ink text-white'}`}>{c.badge}</span>
                 <span className="flex-1 min-w-0"><span className="block font-semibold truncate">{c.title}</span>{c.sub && <span className="block text-sm text-muted truncate">{c.sub}</span>}</span>
               </Link></li>
             ))}
@@ -94,14 +98,14 @@ export default function Home() {
         {q.trim().length >= 2 && results.length === 0 && pickHits.length === 0 && closest.length === 0 && places.length > 0 && <p className="m-0 mt-2 text-sm text-muted">No match for “{q}”{online ? '. Try another spelling or a state name.' : '. You’re offline, so only exact words are searched — try again when connected.'}</p>}
       </div>
 
-      <Link to="/explore" className="relative overflow-hidden flex flex-col justify-end gap-1 h-36 p-5 rounded-3xl bg-forest text-white no-underline">
-        <svg width="230" height="120" viewBox="0 0 230 120" fill="none" aria-hidden="true" className="absolute -right-2 -top-3 scale-90 origin-top-right"><circle cx="186" cy="30" r="14" stroke="#F2B35C" strokeWidth="3" /><path d="M0 112C40 84 78 80 112 94C146 108 186 86 230 70" stroke="#fff" strokeOpacity=".3" strokeWidth="3" strokeLinecap="round" /><path d="M96 92L114 52L132 92ZM126 98L148 46L170 98ZM160 88L176 58L192 88Z" stroke="#fff" strokeOpacity=".4" strokeWidth="3" strokeLinejoin="round" /></svg>
+      <Link to="/explore" className="relative overflow-hidden flex flex-col justify-end gap-1 h-32 p-5 rounded-3xl bg-forest text-white no-underline">
+        <svg width="230" height="120" viewBox="0 0 230 120" fill="none" aria-hidden="true" className="absolute -right-2 -top-4 scale-[0.8] origin-top-right"><circle cx="186" cy="30" r="14" stroke="#F2B35C" strokeWidth="3" /><path d="M0 112C40 84 78 80 112 94C146 108 186 86 230 70" stroke="#fff" strokeOpacity=".3" strokeWidth="3" strokeLinecap="round" /><path d="M96 92L114 52L132 92ZM126 98L148 46L170 98ZM160 88L176 58L192 88Z" stroke="#fff" strokeOpacity=".4" strokeWidth="3" strokeLinejoin="round" /></svg>
         <span className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#CFE3D2]">Vacation</span>
         <span className="font-display text-3xl font-bold tracking-tight">Explore</span>
         <span className="text-[15px] text-[#E4F0E5]">Forests, hill stations, beaches</span>
       </Link>
-      <Link to="/darshan" className="relative overflow-hidden flex flex-col justify-end gap-1 h-36 p-5 rounded-3xl bg-saffron text-maroon no-underline">
-        <svg width="150" height="130" viewBox="0 0 150 130" fill="none" aria-hidden="true" className="absolute right-4 -top-2 scale-90 origin-top-right"><path d="M20 128V96H36V70H52V46H64V22H86V46H98V70H114V96H130V128M75 22V6" stroke="#4A1320" strokeOpacity=".35" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" /></svg>
+      <Link to="/darshan" className="relative overflow-hidden flex flex-col justify-end gap-1 h-32 p-5 rounded-3xl bg-saffron text-maroon no-underline">
+        <svg width="150" height="130" viewBox="0 0 150 130" fill="none" aria-hidden="true" className="absolute right-4 -top-3 scale-[0.8] origin-top-right"><path d="M20 128V96H36V70H52V46H64V22H86V46H98V70H114V96H130V128M75 22V6" stroke="#4A1320" strokeOpacity=".35" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" /></svg>
         <span className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#4A1320]">Spiritual</span>
         <span className="font-serif text-3xl font-bold">Darshan</span>
         <span className="text-[15px]">Temples, timings, sacred circuits</span>
@@ -121,6 +125,11 @@ export default function Home() {
           </Link>
         )
       })()}
+      <Link to="/makers" className="flex items-center gap-4 p-4 rounded-3xl bg-indigo text-white no-underline">
+        <span className="w-11 h-11 shrink-0 rounded-xl bg-white/10 grid place-items-center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F2B35C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 10l9-6 9 6M5 10v10h14V10M9 20v-6h6v6" /></svg></span>
+        <span className="flex-1 min-w-0"><span className="block font-display text-xl font-bold">Local Makers</span><span className="block text-sm text-white/80 truncate">Farmers, weavers and artisans near your trip</span></span>
+        <span aria-hidden="true" className="text-2xl">›</span>
+      </Link>
 
       <div className="grid grid-cols-2 gap-3">
         <Link to="/movies" className="flex flex-col gap-1 p-4 bg-ink text-white rounded-2xl no-underline">

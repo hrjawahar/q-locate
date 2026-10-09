@@ -5,7 +5,7 @@ import { downloadPlacePdf } from './pdf'
 import { LogoMark } from '../components/Logo'
 import { Footer } from './Layout'
 import { CONFIG } from './config'
-import { loadPlace, loadFestivals, festivalDates, festivalMonths, type Festival, isSaved, savePlace, unsavePlace, openNow, fmtTime, km, where, placeUrl, ACCESS, VISIT, STAY, AMENITY, MONTHS, type Place } from './data'
+import { loadPlace, loadFestivals, loadMakers, type Maker, festivalDates, festivalMonths, type Festival, isSaved, savePlace, phoneDigits, unsavePlace, openNow, fmtTime, km, where, placeUrl, ACCESS, VISIT, STAY, AMENITY, MONTHS, type Place } from './data'
 
 const H = ({ children, dark }: { children: React.ReactNode; dark: boolean }) =>
   <h2 className={`m-0 mb-3 text-xl font-bold ${dark ? 'font-serif text-maroon' : 'font-display text-forest'}`}>{children}</h2>
@@ -19,6 +19,7 @@ export default function PlacePage() {
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
   const [fests, setFests] = useState<Festival[]>([])
+  const [makers, setMakers] = useState<Maker[]>([])
 
   useEffect(() => {
     setP(undefined)
@@ -35,6 +36,13 @@ export default function PlacePage() {
     Promise.all([QRCode.toString(mapsUrl, { type: 'svg', margin: 0 }), QRCode.toString(pageUrl, { type: 'svg', margin: 0 })])
       .then(([maps, page]) => setQr({ maps, page })).catch(() => {})
   }, [p, mapsUrl, pageUrl])
+
+  // Makers in the same district (or town) as this place.
+  useEffect(() => {
+    if (!p) return
+    const keys = [p.district_city, p.city].filter(Boolean).map((x: string) => x.toLowerCase())
+    loadMakers().then((all) => setMakers(keys.length ? all.filter((m) => [m.district, m.village].some((x) => x && keys.includes(x.toLowerCase()))).slice(0, 6) : []))
+  }, [p])
 
   if (p === undefined) return <p className="p-6">Loading…</p>
   if (p === null) return (
@@ -92,7 +100,7 @@ export default function PlacePage() {
         <a className={action} href={mapsUrl} target="_blank" rel="noreferrer"><I d="M12 21s-7-6.3-7-11.5A7 7 0 0 1 19 9.5C19 14.7 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />Directions</a>
         <button className={action} onClick={toggleSave} aria-pressed={saved}><I d="M6 3h12v18l-6-4-6 4z" />{saved ? 'Saved' : 'Save'}</button>
         <button className={action} onClick={share}><I d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13" />Share</button>
-        <button className={action} disabled={busy} onClick={async () => { setBusy(true); flash('Preparing PDF…'); try { await downloadPlacePdf(p, pageUrl, mapsUrl, fests); flash('PDF downloaded') } catch { flash('Could not make the PDF. Try again.') } finally { setBusy(false) } }}><I d="M12 3v12M7 10l5 5 5-5M5 21h14" />{busy ? 'Wait…' : 'PDF'}</button>
+        <button className={action} disabled={busy} onClick={async () => { setBusy(true); flash('Preparing PDF…'); try { await downloadPlacePdf(p, pageUrl, mapsUrl, fests, makers); flash('PDF downloaded') } catch { flash('Could not make the PDF. Try again.') } finally { setBusy(false) } }}><I d="M12 3v12M7 10l5 5 5-5M5 21h14" />{busy ? 'Wait…' : 'PDF'}</button>
         {website && <a className={action} href={website} target="_blank" rel="noreferrer"><I d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />Website</a>}
         {reel && <a className={action} href={reel.url} target="_blank" rel="noreferrer"><I d="M5 3l14 9-14 9V3z" />Watch</a>}
       </div>
@@ -189,6 +197,22 @@ export default function PlacePage() {
             ))}
           </ul>
           <p className="m-0 mt-2 text-xs text-muted">Listed, not endorsed.</p>
+        </Section>
+      )}
+
+      {makers.length > 0 && (
+        <Section><H dark={dark}>Made nearby</H>
+          <ul className="list-none m-0 p-0 flex flex-col gap-2">
+            {makers.map((m) => (
+              <li key={m.slug} className="p-3 rounded-xl bg-white flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex-1 min-w-48"><b>{m.name}</b> <span className="text-sm text-muted">· {m.village}</span>
+                  <div className="text-sm">{m.products}</div></div>
+                {m.phone && <a className="no-print text-sm font-semibold" href={`tel:+${phoneDigits(m.phone)}`}>Call</a>}
+                {m.phone && <span className="print-only text-sm">{m.phone}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="m-0 mt-2 text-xs text-muted">Listed for information; Q-Locate doesn’t sell or handle payments.</p>
         </Section>
       )}
 

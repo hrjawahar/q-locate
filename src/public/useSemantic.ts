@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export interface SemHit { type: 'place' | 'movie' | 'book' | 'festival'; slug: string; kind?: string; score: number }
+export interface SemHit { type: 'place' | 'movie' | 'book' | 'festival' | 'maker'; slug: string; kind?: string; score: number }
 const cache = new Map<string, SemHit[]>()
 
 /** Is the device online? Updates live. */

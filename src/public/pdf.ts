@@ -1,4 +1,4 @@
-import { km, where, fmtTime, ACCESS, VISIT, STAY, AMENITY, MONTHS, festivalDates, festivalMonths, type Place, type Festival } from './data'
+import { km, where, fmtTime, ACCESS, VISIT, STAY, AMENITY, MONTHS, festivalDates, festivalMonths, type Place, type Festival, type Maker } from './data'
 
 type RGB = [number, number, number]
 const INK: RGB = [30, 42, 34], MUTED: RGB = [91, 107, 94]
@@ -20,7 +20,7 @@ async function photoData(url: string): Promise<{ data: string; w: number; h: num
   } catch { return null }
 }
 
-export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: string, fests: Festival[] = []) {
+export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: string, fests: Festival[] = [], makers: Maker[] = []) {
   const [{ jsPDF }, QR] = await Promise.all([import('jspdf'), import('qrcode').then((m) => m.default)])
   const dark = p.kind === 'spiritual'
   const ACC: RGB = dark ? [107, 30, 42] : [46, 91, 60]
@@ -124,6 +124,12 @@ export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: strin
     heading('Places to eat')
     p.eateries.forEach((s: Place) => bullet(`${s.name}${s.pure_veg ? ' (Pure veg)' : ''}${s.is_partner ? ' [Partner]' : ''}`, [km(s.distance_km), s.phone].filter(Boolean).join(' - ')))
     text('Listed, not endorsed.', 8.5, 'normal', MUTED)
+  }
+
+  if (makers.length) {
+    heading('Made nearby')
+    makers.forEach((m) => bullet(`${m.name} (${m.village ?? ''}) - ${m.products ?? ''}`, m.phone))
+    text('Listed for information; Q-Locate does not sell or handle payments.', 8.5, 'normal', MUTED)
   }
 
   if ((p.nearby ?? []).length) { heading('Nearby'); p.nearby.forEach((n: Place) => bullet(`${n.name} - ${km(n.distance_km)}`, n.what_to_expect)) }

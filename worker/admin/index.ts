@@ -7,6 +7,7 @@ import * as tracker from './tracker'
 import * as movies from './movies'
 import * as books from './books'
 import * as festivals from './festivals'
+import * as makers from './makers'
 import * as vectors from './vectors'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
@@ -52,6 +53,16 @@ export default {
       if (pathname === '/api/admin/search/status' && m === 'GET') return vectors.status(env)
       if (pathname === '/api/admin/search/rebuild' && m === 'POST' && admin.role === 'owner') return vectors.rebuild(env)
       if (pathname === '/api/admin/search/sync' && m === 'POST' && admin.role !== 'editor') return json({ done: await vectors.sync(env) })
+      if (pathname.startsWith('/api/admin/makers')) {
+        if (admin.scope !== 'all') return json({ error: 'Local Makers needs an admin with access to all sections' }, { status: 403 })
+        const km = pathname.match(/^\/api\/admin\/makers\/(\d+)(\/(status))?$/)
+        if (pathname === '/api/admin/makers' && m === 'GET') return makers.list(url, env)
+        if (pathname === '/api/admin/makers' && m === 'POST') return makers.save(null, await body(), env, admin)
+        if (km && !km[2] && m === 'GET') return makers.get(Number(km[1]), env)
+        if (km && !km[2] && m === 'PUT') return makers.save(Number(km[1]), await body(), env, admin)
+        if (km && !km[2] && m === 'DELETE') return makers.remove(Number(km[1]), env, admin)
+        if (km && km[3] === 'status' && m === 'POST') return makers.setStatus(Number(km[1]), await body(), env, admin)
+      }
       if (pathname.startsWith('/api/admin/festivals')) {
         if (admin.scope !== 'all') return json({ error: 'Festivals needs an admin with access to all sections' }, { status: 403 })
         const fm = pathname.match(/^\/api\/admin\/festivals\/(\d+)(\/(status|dates))?$/)

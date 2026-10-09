@@ -155,3 +155,18 @@ export function festivalOrder(f: Festival) {
   const ahead = f.months.map((x) => (x - m + 12) % 12)
   return ahead.length ? Math.min(...ahead) * 30 + 15 : 9999
 }
+
+// ---------- Local Makers ----------
+export interface Maker {
+  slug: string; name: string; products: string | null; category: string | null; village: string | null; district: string | null
+  state: string | null; country: string | null; phone: string | null; about: string | null
+}
+let makersPromise: Promise<Maker[]> | null = null
+export function loadMakers(): Promise<Maker[]> {
+  makersPromise ??= getJson<{ makers: Maker[] }>('/api/makers.json')
+    .then(async (d) => { await set('makers', d.makers).catch(() => {}); return d.makers })
+    .catch(async () => ((await get('makers').catch(() => null)) as Maker[] | undefined) ?? [])
+  return makersPromise
+}
+/** Digits for tel: and wa.me links (adds India's +91 to 10-digit numbers). */
+export const phoneDigits = (p: string) => { const d = p.replace(/[^\d]/g, ''); return d.length === 10 ? `91${d}` : d.replace(/^0+/, '') }

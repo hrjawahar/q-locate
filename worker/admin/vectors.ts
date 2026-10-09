@@ -46,6 +46,11 @@ const SOURCES = {
       String(r.months ?? '').split(',').map(Number).filter(Boolean).map((m) => MONTHS[m - 1]).join(', ') && `Celebrated in ${String(r.months).split(',').map(Number).filter(Boolean).map((m) => MONTHS[m - 1]).join(', ')}`,
       r.summary, r.tips),
   },
+  makers: {
+    prefix: 'k',
+    sql: "SELECT id, CASE WHEN consent = 1 THEN status ELSE 'draft' END AS status, updated_at, name, products, category, village, district, state, country, about FROM makers",
+    text: (r: Record<string, unknown>) => join(`${r.name}, local maker`, r.category, r.products && `Sells ${r.products}`, [r.village, r.district, r.state, r.country].filter(Boolean).join(', '), r.about),
+  },
 } as const
 
 /** Process a batch of changed items per table. Returns how many were handled. */
@@ -90,6 +95,6 @@ export async function status(env: Env) {
   return json({ ai: !!env.AI, count: await count(env) })
 }
 export async function rebuild(env: Env) {
-  await env.DB.prepare("DELETE FROM meta WHERE key IN ('vec_places', 'vec_movies', 'vec_books', 'vec_festivals')").run()
+  await env.DB.prepare("DELETE FROM meta WHERE key IN ('vec_places', 'vec_movies', 'vec_books', 'vec_festivals', 'vec_makers')").run()
   return json({ ok: true })
 }

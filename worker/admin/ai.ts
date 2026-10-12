@@ -3,10 +3,12 @@
 // is marked "AI draft — verify" until an admin checks it, and the pages it used are kept for checking.
 
 import { validScriptNames } from './scripts'
+import { sourceHints, BLOCKED } from './trusted'
 export interface AiFacts {
   name: string
   kind: 'vacation' | 'spiritual'
   location: string
+  state?: string | null; district?: string | null; country?: string | null
   description?: string
   deity?: string | null
   wikipedia_extract?: string
@@ -37,7 +39,7 @@ export interface AiDraft {
 const SYSTEM = `You research and write short, practical notes for Q-Locate, a quick location guide for budget travellers, backpackers and pilgrims.
 What makes a note valuable: what the visitor will actually experience, how much effort it takes, when to go and when not to, and the one or two things people wish they had known.
 Rules:
-- Start from the facts JSON. If a web_search tool is available, use it (2-4 searches) to confirm and add practical details. Prefer official, government, forest-department, tourism-board and temple-trust sites, then Wikipedia and established news outlets. Ignore booking-site marketing and anonymous forums.
+- Start from the facts JSON. If a web_search tool is available, use it (3-6 searches) to confirm and add practical details: timings, entry fees, address with PIN code, how to reach, and well-known sights nearby. Use the official sources listed in the message first (Incredible India, the state tourism board, the district website, ASI, temple trusts), then Wikipedia and established news outlets. Ignore booking-site marketing and anonymous forums.
 - Never invent anything. Every fact must come from the facts JSON or a page you read. If unsure, leave the field empty.
 - Timings and entry fees: only if a source states them; add the source year if shown, e.g. "6 am - 5 pm (forest dept, 2025)".
 - Plain, neutral English. No hype words (must-visit, best, breathtaking, stunning, hidden gem, paradise). No safety guarantees; state real cautions plainly (e.g. "closed to visitors in heavy monsoon").
@@ -68,8 +70,8 @@ async function call(apiKey: string, model: string, facts: AiFacts, web: boolean)
       model,
       max_tokens: 2000,
       system: SYSTEM,
-      ...(web ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }] } : { temperature: 0 }),
-      messages: [{ role: 'user', content: `${schema(facts.kind)}${facts.names_needed?.length ? `\nAlso add the key "local_names": {${facts.names_needed.map((k) => `"${k}": ""`).join(', ')}} — the place's name as written in ${facts.names_needed.map((k) => ({ ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', hi: 'Hindi' } as Record<string, string>)[k]).join(', ')} script (as used on signboards or official sites; a careful transliteration of the proper name if none is published).` : ''}\n\nPlace: ${facts.name} (${facts.location})\n\nFacts:\n${JSON.stringify(facts)}` }],
+      ...(web ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6, blocked_domains: BLOCKED }] } : { temperature: 0 }),
+      messages: [{ role: 'user', content: `${schema(facts.kind)}${facts.names_needed?.length ? `\nAlso add the key "local_names": {${facts.names_needed.map((k) => `"${k}": ""`).join(', ')}} — the place's name as written in ${facts.names_needed.map((k) => ({ ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', hi: 'Hindi' } as Record<string, string>)[k]).join(', ')} script (as used on signboards or official sites; a careful transliteration of the proper name if none is published).` : ''}\n\n${web ? `${sourceHints(facts.state, facts.district, facts.country)}\n\n` : ''}Place: ${facts.name} (${facts.location})\n\nFacts:\n${JSON.stringify(facts)}` }],
     }),
   })
 }

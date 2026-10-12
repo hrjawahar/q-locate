@@ -231,6 +231,7 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
         // Indian places: ask for the name in the scripts Wikidata doesn't have yet.
         names_needed: (wd.country ?? 'India') === 'India' ? missingScripts(wd.altNames) : [],
         location: [wd.city, wd.district, wd.state, wd.country].filter(Boolean).join(', '),
+        state: wd.state, district: wd.district, country: wd.country,
         description: wd.description, deity: wd.deity, wikipedia_extract: wiki?.text, wikidata_facts: wd.facts,
         transport: merged?.transport, nearby: merged?.nearby,
       }, notes, env.AI_WEB_SEARCH !== 'off')

@@ -232,6 +232,7 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
         names_needed: (wd.country ?? 'India') === 'India' ? missingScripts(wd.altNames) : [],
         location: [wd.city, wd.district, wd.state, wd.country].filter(Boolean).join(', '),
         state: wd.state, district: wd.district, country: wd.country,
+        categories_allowed: (await env.DB.prepare('SELECT slug, name FROM categories WHERE kind = ? ORDER BY sort').bind(kind).all<{ slug: string; name: string }>()).results,
         description: wd.description, deity: wd.deity, wikipedia_extract: wiki?.text, wikidata_facts: wd.facts,
         transport: merged?.transport, nearby: merged?.nearby,
       }, notes, env.AI_WEB_SEARCH !== 'off')
@@ -239,7 +240,7 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
   }
   if (ai) {
     const got = [ai.summary && 'summary', ai.highlights && `${ai.highlights.length} highlights`, ai.how_to_reach && 'how to reach', ai.nearby?.length && 'nearby notes',
-      ai.nearby_new?.length && `${ai.nearby_new.length} nearby places`, ai.practical && 'practical details', ai.refs?.length && `${ai.refs.length} web pages to check`].filter(Boolean)
+      ai.nearby_new?.length && `${ai.nearby_new.length} nearby places`, ai.practical && 'practical details', ai.categories?.length && `categories (${ai.categories.join(', ')})`, ai.refs?.length && `${ai.refs.length} web pages to check`].filter(Boolean)
     notes.push(got.length ? `AI: ${got.join(', ')}` : 'AI found too little in the sources')
   }
   if (!wiki) notes.push('No English Wikipedia article')
@@ -318,6 +319,11 @@ function aiFields(g: Gathered) {
   return f
 }
 
+/** Categories the AI picked (from our own list) are added; existing ones are kept. */
+function aiCategories(env: Env, placeId: number, kind: Kind, g: Gathered) {
+  return (g.ai?.categories ?? []).map((slug) => env.DB.prepare('INSERT OR IGNORE INTO place_categories (place_id, category_id) SELECT ?, id FROM categories WHERE kind = ? AND slug = ?').bind(placeId, kind, slug))
+}
+
 async function linkExtras(env: Env, placeId: number, row: Pick<QueueRow, 'kind' | 'category_slug' | 'circuit_slug' | 'circuit_position'>) {
   const s: D1PreparedStatement[] = []
   if (row.category_slug) s.push(env.DB.prepare('INSERT OR IGNORE INTO place_categories (place_id, category_id) SELECT ?, id FROM categories WHERE kind = ? AND slug = ?').bind(placeId, row.kind, row.category_slug))
@@ -358,6 +364,7 @@ async function importOne(env: Env, row: QueueRow): Promise<{ placeId: number | n
       : env.DB.prepare('INSERT OR IGNORE INTO temple_details (place_id, main_deity) VALUES (?, ?)').bind(placeId, wd.deity),
     ...childStatements(env, placeId, g, { transport: true, stays: true, eateries: true, nearby: true, sources: true, website: true }),
     ...practicalStatements(env, placeId, row.kind, g, null, true),
+    ...aiCategories(env, placeId, row.kind, g),
     env.DB.prepare("INSERT INTO audit_log (actor, action, entity, entity_id) VALUES ('importer', 'import', 'place', ?)").bind(String(placeId)),
   ]
   try { await env.DB.batch(stmts) } catch (e) {
@@ -450,6 +457,7 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
     env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(...cols.map((c) => set[c]), actor, id),
     ...nearbyNotes,
     ...extraNearby,
+    ...aiCategories(env, id, p.kind as Kind, g),
     ...(p.kind === 'spiritual' && g.wd.deity ? [env.DB.prepare("INSERT INTO temple_details (place_id, main_deity) VALUES (?, ?) ON CONFLICT(place_id) DO UPDATE SET main_deity = COALESCE(NULLIF(temple_details.main_deity, ''), excluded.main_deity)").bind(id, g.wd.deity)] : []),
     ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: false, website: empty[5] }),
     ...(await hasAutoSources(env, id) ? [] : childStatements(env, id, { ...g, ai: null }, { transport: false, stays: false, eateries: false, nearby: false, sources: true, website: false })),

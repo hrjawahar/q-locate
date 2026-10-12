@@ -17,6 +17,7 @@ export interface AiFacts {
   nearby?: { name: string; kind: string; distance_km: number }[]
   existing_highlights?: string[]
   names_needed?: string[] // script codes still missing, e.g. ['te','kn','ml']
+  categories_allowed?: { slug: string; name: string }[]
 }
 
 export interface AiPractical {
@@ -34,6 +35,7 @@ export interface AiDraft {
   practical?: AiPractical
   refs?: { url: string; title: string }[]
   local_names?: string[]
+  categories?: string[]
 }
 
 const SYSTEM = `You research and write short, practical notes for Q-Locate, a quick location guide for budget travellers, backpackers and pilgrims.
@@ -61,17 +63,17 @@ const schema = (kind: 'vacation' | 'spiritual') => `Return JSON with exactly the
 
 type Block = { type: string; text?: string; content?: { type: string; url?: string; title?: string }[] | unknown; citations?: { url?: string; title?: string }[] }
 
-async function call(apiKey: string, model: string, facts: AiFacts, web: boolean) {
+async function call(apiKey: string, model: string, facts: AiFacts, web: boolean, block = true) {
   return fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    signal: AbortSignal.timeout(110_000),
+    signal: AbortSignal.timeout(170_000),
     headers: { 'x-api-key': apiKey.trim().replace(/^["']|["']$/g, ''), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model,
-      max_tokens: 2000,
+      max_tokens: 6000,
       system: SYSTEM,
-      ...(web ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6, blocked_domains: BLOCKED }] } : { temperature: 0 }),
-      messages: [{ role: 'user', content: `${schema(facts.kind)}${facts.names_needed?.length ? `\nAlso add the key "local_names": {${facts.names_needed.map((k) => `"${k}": ""`).join(', ')}} — the place's name as written in ${facts.names_needed.map((k) => ({ ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', hi: 'Hindi' } as Record<string, string>)[k]).join(', ')} script (as used on signboards or official sites; a careful transliteration of the proper name if none is published).` : ''}\n\n${web ? `${sourceHints(facts.state, facts.district, facts.country)}\n\n` : ''}Place: ${facts.name} (${facts.location})\n\nFacts:\n${JSON.stringify(facts)}` }],
+      ...(web ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6, ...(block ? { blocked_domains: BLOCKED } : {}) }] } : { temperature: 0 }),
+      messages: [{ role: 'user', content: `${schema(facts.kind)}${facts.names_needed?.length ? `\nAlso add the key "local_names": {${facts.names_needed.map((k) => `"${k}": ""`).join(', ')}} — the place's name as written in ${facts.names_needed.map((k) => ({ ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', hi: 'Hindi' } as Record<string, string>)[k]).join(', ')} script (as used on signboards or official sites; a careful transliteration of the proper name if none is published).` : ''}${facts.categories_allowed?.length ? `\nAlso add the key "categories": [every slug that fits, from: ${facts.categories_allowed.map((c) => `"${c.slug}" (${c.name})`).join(', ')}] — e.g. a temple on a hill or reached by steps is also "hill-temple".` : ''}\n\n${web ? `${sourceHints(facts.state, facts.district, facts.country)}\n\n` : ''}Place: ${facts.name} (${facts.location})\n\nFacts:\n${JSON.stringify(facts)}` }],
     }),
   })
 }
@@ -80,7 +82,9 @@ export async function draftWithAi(apiKey: string, model: string, facts: AiFacts,
   let res = await call(apiKey, model, facts, web)
   if (!res.ok && web && res.status === 400) {
     const t = await res.clone().text()
-    if (/web.?search|tool/i.test(t)) { notes.push('AI web search unavailable on this API key; drafted from open sources only'); res = await call(apiKey, model, facts, false) }
+    // The "skip these sites" list was refused: search again without it before giving up on web search.
+    if (/blocked_domains|domain/i.test(t)) { res = await call(apiKey, model, facts, true, false); if (res.ok) notes.push('AI searched without the skip-list (refused by the AI service)') }
+    if (!res.ok && res.status === 400 && /web.?search|tool/i.test(await res.clone().text())) { notes.push('AI web search unavailable on this API key; drafted from open sources only'); res = await call(apiKey, model, facts, false) }
   }
   if (!res.ok) {
     const t = await res.text()
@@ -89,7 +93,8 @@ export async function draftWithAi(apiKey: string, model: string, facts: AiFacts,
     if (res.status === 404 || /model/i.test(t)) throw new Error(`AI model "${model}" not available — check AI_MODEL`)
     throw new Error(`AI answered ${res.status}: ${t.slice(0, 120)}`)
   }
-  const data = (await res.json()) as { content?: Block[] }
+  const data = (await res.json()) as { content?: Block[]; stop_reason?: string }
+  if (data.stop_reason === 'max_tokens') notes.push('AI reply was cut short')
   const blocks = data.content ?? []
   // Pages the model looked at, kept so the editor can check the draft.
   const refs = new Map<string, string>()
@@ -100,7 +105,9 @@ export async function draftWithAi(apiKey: string, model: string, facts: AiFacts,
   for (const b of blocks) for (const c of b.citations ?? []) if (c.url) cited.set(c.url, c.title ?? c.url)
   const lastTool = blocks.map((b) => b.type).lastIndexOf('web_search_tool_result')
   const text = blocks.slice(lastTool + 1).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('')
-  const draft = parseDraft(text, facts)
+  // If the JSON isn't after the last search, look through all the text the model wrote.
+  const draft = parseDraft(text, facts) ?? parseDraft(blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''), facts)
+  if (!draft) notes.push('AI reply could not be read (no JSON found) — try Rewrite with AI again')
   if (draft) {
     const use = cited.size ? cited : refs
     draft.refs = [...use].slice(0, 6).map(([url, title]) => ({ url, title: title.slice(0, 160) }))
@@ -111,12 +118,25 @@ export async function draftWithAi(apiKey: string, model: string, facts: AiFacts,
 const ACCESS = ['drive_up', 'short_walk', 'steps_climb', 'trek']
 const VISIT = ['few_hours', '1_day', '2_3_days', 'week_plus']
 
+/** The last {...} in the text that parses as JSON and looks like our answer (has a summary or practical key). */
+function lastJson(text: string): Record<string, unknown> | null {
+  const t = text.replace(/```(?:json)?/g, '')
+  for (let end = t.lastIndexOf('}'); end > 0; end = t.lastIndexOf('}', end - 1)) {
+    let depth = 0
+    for (let i = end; i >= 0; i--) {
+      if (t[i] === '}') depth++
+      else if (t[i] === '{' && --depth === 0) {
+        try { const o = JSON.parse(t.slice(i, end + 1)); if (o && typeof o === 'object' && ('summary' in o || 'practical' in o || 'highlights' in o)) return o } catch { /* try an earlier start */ }
+      }
+    }
+  }
+  return null
+}
+
 /** Parse and sanity-check the model's JSON; drop anything that doesn't fit. */
 export function parseDraft(text: string, facts: AiFacts): AiDraft | null {
-  const m = text.match(/\{[\s\S]*\}/)
-  if (!m) return null
-  let raw: Record<string, unknown>
-  try { raw = JSON.parse(m[0]) } catch { return null }
+  const raw = lastJson(text)
+  if (!raw) return null
   const str = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/<\/?cite[^>]*>/g, '').trim().slice(0, max) : '')
   const out: AiDraft = {}
   const summary = str(raw.summary, 420)
@@ -148,6 +168,9 @@ export function parseDraft(text: string, facts: AiFacts): AiDraft | null {
     const tv = str(pr.typical_visit, 20); if (VISIT.includes(tv)) p.typical_visit = tv
   } else { s('dress_code', 160); s('festivals', 160); s('significance', 200); s('tradition', 30) }
   if (Object.keys(p).length) out.practical = p
+  const okCats = new Set((facts.categories_allowed ?? []).map((c) => c.slug))
+  const cats = Array.isArray(raw.categories) ? [...new Set(raw.categories.map((c) => str(c, 40)).filter((c) => okCats.has(c)))] : []
+  if (cats.length) out.categories = cats
   const ln = validScriptNames(raw.local_names, facts.names_needed ?? [])
   if (ln.length) out.local_names = ln
   return out

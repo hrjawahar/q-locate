@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { downloadPlacePdf } from './pdf'
 import { LogoMark } from '../components/Logo'
 import { Footer } from './Layout'
 import { CONFIG } from './config'
-import { loadPlace, loadFestivals, loadMakers, type Maker, festivalDates, festivalMonths, type Festival, isSaved, savePlace, phoneDigits, unsavePlace, openNow, fmtTime, km, where, placeUrl, ACCESS, VISIT, STAY, AMENITY, MONTHS, type Place } from './data'
+import { loadIndex, distKm, regionOf, regionUrl, type IndexPlace, loadPlace, loadFestivals, loadMakers, type Maker, festivalDates, festivalMonths, type Festival, isSaved, savePlace, phoneDigits, unsavePlace, openNow, fmtTime, km, where, placeUrl, ACCESS, VISIT, STAY, AMENITY, MONTHS, type Place } from './data'
 
 const H = ({ children, dark }: { children: React.ReactNode; dark: boolean }) =>
   <h2 className={`m-0 mb-3 text-xl font-bold ${dark ? 'font-serif text-maroon' : 'font-display text-forest'}`}>{children}</h2>
+const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim()
+const NEAR_KM = 40
+
 const Section = ({ children }: { children: React.ReactNode }) => <section className="px-5 py-5 border-t border-stone-200 print-avoid-break">{children}</section>
 
 export default function PlacePage() {
@@ -20,6 +23,8 @@ export default function PlacePage() {
   const [busy, setBusy] = useState(false)
   const [fests, setFests] = useState<Festival[]>([])
   const [makers, setMakers] = useState<Maker[]>([])
+  const [idx, setIdx] = useState<IndexPlace[]>([])
+  useEffect(() => { loadIndex().then(setIdx) }, [])
 
   useEffect(() => {
     setP(undefined)
@@ -43,6 +48,27 @@ export default function PlacePage() {
     const keys = [p.district_city, p.city].filter(Boolean).map((x: string) => x.toLowerCase())
     loadMakers().then((all) => setMakers(keys.length ? all.filter((m) => [m.district, m.village].some((x) => x && keys.includes(x.toLowerCase()))).slice(0, 6) : []))
   }, [p])
+
+  // One Nearby list: our own published places first (within ~40 km by map pin, or named in the list), then other sights.
+  const near = useMemo(() => {
+    if (!p) return { ours: [] as { q: IndexPlace; km: number | null; note: string }[], others: [] as Place[] }
+    const byName = new Map<string, IndexPlace>()
+    for (const q of idx) if (q.slug !== p.slug) for (const n of [q.name, ...q.alt_names.split(',')]) if (norm(n)) byName.set(norm(n), q)
+    const ours = new Map<string, { q: IndexPlace; km: number | null; note: string }>()
+    const here = p.lat != null && p.lng != null ? { lat: Number(p.lat), lng: Number(p.lng) } : null
+    const others: Place[] = []
+    for (const n of p.nearby ?? []) {
+      const q = (n.linked_slug && idx.find((x) => x.slug === n.linked_slug)) || byName.get(norm(n.name))
+      if (q) ours.set(q.slug, { q, km: n.distance_km ?? (here && q.lat != null && q.lng != null ? distKm(here, { lat: q.lat, lng: q.lng }) : null), note: n.what_to_expect || '' })
+      else others.push(n)
+    }
+    if (here) for (const q of idx) {
+      if (q.slug === p.slug || ours.has(q.slug) || q.lat == null || q.lng == null) continue
+      const k = distKm(here, { lat: q.lat, lng: q.lng })
+      if (k <= NEAR_KM) ours.set(q.slug, { q, km: k, note: '' })
+    }
+    return { ours: [...ours.values()].sort((a, b) => (a.km ?? 999) - (b.km ?? 999)).slice(0, 8), others }
+  }, [p, idx])
 
   if (p === undefined) return <p className="p-6">Loading…</p>
   if (p === null) return (
@@ -92,7 +118,7 @@ export default function PlacePage() {
         </div>
         <h1 className={`m-0 text-[28px] leading-tight font-bold ${dark ? 'font-serif text-maroon' : 'font-display tracking-tight'}`}>{p.name}</h1>
         {p.alt_names && <p className="m-0 text-sm text-muted">Also known as: {p.alt_names}</p>}
-        <p className="m-0 text-muted">{where(p)}</p>
+        <p className="m-0 text-muted">{where(p)}{regionUrl(p) && <> · <Link to={regionUrl(p)} className="no-print font-semibold">More in {regionOf(p)} →</Link></>}</p>
         {p.address && (
           <p className="m-0 text-sm flex items-start gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="shrink-0 mt-0.5"><path d="M12 21s-7-6.3-7-11.5A7 7 0 0 1 19 9.5C19 14.7 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
             <span className="flex-1">{p.address}</span>
@@ -106,7 +132,7 @@ export default function PlacePage() {
         <a className={action} href={mapsUrl} target="_blank" rel="noreferrer"><I d="M12 21s-7-6.3-7-11.5A7 7 0 0 1 19 9.5C19 14.7 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />Directions</a>
         <button className={action} onClick={toggleSave} aria-pressed={saved}><I d="M6 3h12v18l-6-4-6 4z" />{saved ? 'Saved' : 'Save'}</button>
         <button className={action} onClick={share}><I d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13" />Share</button>
-        <button className={action} disabled={busy} onClick={async () => { setBusy(true); flash('Preparing PDF…'); try { await downloadPlacePdf(p, pageUrl, mapsUrl, fests, makers); flash('PDF downloaded') } catch { flash('Could not make the PDF. Try again.') } finally { setBusy(false) } }}><I d="M12 3v12M7 10l5 5 5-5M5 21h14" />{busy ? 'Wait…' : 'PDF'}</button>
+        <button className={action} disabled={busy} onClick={async () => { setBusy(true); flash('Preparing PDF…'); try { await downloadPlacePdf({ ...p, nearby: [...near.ours.map((o) => ({ name: `${o.q.name} (on Q-Locate)`, distance_km: o.km, what_to_expect: o.note || o.q.summary.slice(0, 120) })), ...near.others] }, pageUrl, mapsUrl, fests, makers); flash('PDF downloaded') } catch { flash('Could not make the PDF. Try again.') } finally { setBusy(false) } }}><I d="M12 3v12M7 10l5 5 5-5M5 21h14" />{busy ? 'Wait…' : 'PDF'}</button>
         {website && <a className={action} href={website} target="_blank" rel="noreferrer"><I d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />Website</a>}
         {reel && <a className={action} href={reel.url} target="_blank" rel="noreferrer"><I d="M5 3l14 9-14 9V3z" />Watch</a>}
       </div>
@@ -227,19 +253,39 @@ export default function PlacePage() {
         </Section>
       )}
 
-      {(p.nearby ?? []).length > 0 && (
+      {(near.ours.length > 0 || near.others.length > 0) && (
         <Section><H dark={dark}>Nearby</H>
-          <ul className="list-none m-0 p-0 flex flex-col gap-2">
-            {p.nearby.map((n: Place, i: number) => (
-              <li key={i} className="p-3 rounded-xl bg-white">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  {n.linked_slug ? <Link to={placeUrl({ kind: n.linked_kind, slug: n.linked_slug })} className="font-bold">{n.name}</Link> : <b>{n.name}</b>}
-                  <span className="text-sm text-muted">{km(n.distance_km)}</span>
-                </div>
-                {n.what_to_expect && <div className="text-sm mt-1">{n.what_to_expect}</div>}
-              </li>
-            ))}
-          </ul>
+          {near.ours.length > 0 && (
+            <ul className="list-none m-0 p-0 flex flex-col gap-2">
+              {near.ours.map(({ q, km: k, note }) => (
+                <li key={q.slug}>
+                  <Link to={placeUrl(q)} className="p-2 pr-3 rounded-xl bg-white flex gap-3 items-center no-underline text-ink">
+                    <div className={`w-16 h-16 shrink-0 rounded-lg overflow-hidden ${q.kind === 'spiritual' ? 'bg-[#F3E3CC]' : 'bg-[#DDE8DD]'}`}>{q.thumb && <img src={q.thumb} alt="" loading="lazy" className="w-full h-full object-cover" />}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${q.kind === 'spiritual' ? 'bg-saffron/30 text-maroon' : 'bg-forest/10 text-forest'}`}>{q.kind === 'spiritual' ? 'Darshan' : 'Explore'}</span>
+                        <b className="underline decoration-1 underline-offset-2">{q.name}</b><span className="text-sm text-muted">{km(k)}</span>
+                      </div>
+                      <div className="text-sm mt-0.5 line-clamp-2">{note || q.summary}</div>
+                    </div>
+                    <span aria-hidden="true" className="text-xl text-muted">›</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          {near.others.length > 0 && <>
+            {near.ours.length > 0 && <h3 className="m-0 mt-4 mb-2 text-sm font-bold uppercase tracking-wider text-muted">Also around</h3>}
+            <ul className="list-none m-0 p-0 flex flex-col gap-2">
+              {near.others.map((n: Place, i: number) => (
+                <li key={i} className="p-3 rounded-xl bg-white">
+                  <div className="flex flex-wrap items-baseline gap-x-2"><b>{n.name}</b><span className="text-sm text-muted">{km(n.distance_km)}</span></div>
+                  {n.what_to_expect && <div className="text-sm mt-1">{n.what_to_expect}</div>}
+                </li>
+              ))}
+            </ul>
+          </>}
+          {regionUrl(p) && <Link to={regionUrl(p)} className="no-print inline-block mt-3 font-semibold">Everything in {regionOf(p)} — places, temples, festivals →</Link>}
         </Section>
       )}
 

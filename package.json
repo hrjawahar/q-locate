@@ -12,9 +12,11 @@
     "db:seed:remote": "wrangler d1 execute q-locate-db --remote --file=seed/seed.sql"
   },
   "dependencies": {
+    "@types/leaflet": "^1.9.12",
     "idb-keyval": "^6.3.0",
     "jose": "^6.2.12",
     "jspdf": "^4.2.1",
+    "leaflet": "^1.9.4",
     "minisearch": "^7.2.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",

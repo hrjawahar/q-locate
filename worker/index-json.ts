@@ -3,13 +3,13 @@ import { Env, json, splitList, photoUrls, parseJson } from './util'
 // GET /api/index.json — compact list of every published place, for on-device search.
 export const indexJson = async (request: Request, env: Env, ctx: ExecutionContext) => {
   const version = (await env.DB.prepare("SELECT value FROM meta WHERE key = 'index_version'").first<string>('value')) ?? '0'
-  const cacheKey = new Request(new URL(`/api/index.json?v=${version}&s=3`, request.url).toString())
+  const cacheKey = new Request(new URL(`/api/index.json?v=${version}&s=4`, request.url).toString())
   const cache = caches.default
   const hit = await cache.match(cacheKey)
   if (hit) return hit
 
   const { results } = await env.DB.prepare(`
-    SELECT p.slug, p.kind, p.name, p.alt_names, p.country, p.state, p.district_city, p.city, p.tags,
+    SELECT p.slug, p.kind, p.name, p.lat, p.lng, p.alt_names, p.country, p.state, p.district_city, p.city, p.tags,
            p.access_effort, p.access_notes, p.address, p.cover_photo, p.summary, p.highlights, v.best_months, v.typical_visit, t.main_deity, t.darshan_hours,
            t.tradition, t.significance, t.festivals, t.prasadam, t.dress_code, t.photography, p.how_to_reach, p.timings, p.entry_fee,
            p.amenities_notes, v.trek_notes,
@@ -46,6 +46,8 @@ export const indexJson = async (request: Request, env: Env, ctx: ExecutionContex
     best_months: splitList(r.best_months).map(Number),
     typical_visit: r.typical_visit ?? null,
     access_effort: r.access_effort ?? null,
+    lat: r.lat == null ? null : Math.round(Number(r.lat) * 1e5) / 1e5,
+    lng: r.lng == null ? null : Math.round(Number(r.lng) * 1e5) / 1e5,
     thumb: photoUrls(r.cover_photo)?.thumb ?? null,
     summary: typeof r.summary === 'string' ? r.summary.slice(0, 200) : '',
     hours: parseJson(r.darshan_hours, []),

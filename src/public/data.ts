@@ -6,7 +6,7 @@ export type Kind = 'vacation' | 'spiritual'
 export interface IndexPlace {
   slug: string; kind: Kind; name: string; alt_names: string; country: string; state: string; district_city: string; city: string
   tags: string; deity: string; categories: string[]; circuits: string[]; best_months: number[]
-  typical_visit: string | null; access_effort: string | null; thumb: string | null; summary: string; hours: { open: string; close: string }[]
+  typical_visit: string | null; access_effort: string | null; lat: number | null; lng: number | null; thumb: string | null; summary: string; hours: { open: string; close: string }[]
   text?: string
 }
 export interface Meta { categories: { kind: Kind; slug: string; name: string }[]; circuits: { slug: string; name: string; total_count: number | null }[] }
@@ -78,6 +78,16 @@ export const AMENITY: Record<string, string> = { parking: 'Parking', food: 'Food
 export const km = (d: number | null | undefined) => (d == null ? '' : d < 1 ? `about ${Math.round(d * 1000 / 50) * 50} m` : `about ${d < 10 ? d.toFixed(1) : Math.round(d)} km`)
 export const where = (p: { city?: string; district_city?: string; state?: string; country?: string }) =>
   [p.city, p.district_city, p.state, p.country && p.country !== 'India' ? p.country : ''].filter((x, i, a) => x && a.indexOf(x) === i).join(', ')
+/** Straight-line distance in km between two map pins. */
+export function distKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2
+  return 12742 * Math.asin(Math.sqrt(h))
+}
+/** Destination = the state for places in India, the country elsewhere. */
+export const regionOf = (p: { country?: string; state?: string }) => (p.country === 'India' || !p.country ? p.state ?? '' : p.country)
+export const regionSlug = (s: string) => s.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+export const regionUrl = (p: { country?: string; state?: string }) => { const r = regionOf(p); return r ? `/in/${regionSlug(r)}` : '' }
 export const placeUrl = (p: { kind: Kind; slug: string }) => `/${p.kind === 'spiritual' ? 's' : 'v'}/${p.slug}`
 
 /** "Open now" for Indian temples, using India time. */

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Footer } from './Layout'
 import { snippet } from './searchkit'
 import { useSemantic } from './useSemantic'
-import { loadIndex, loadMeta, loadFestivals, festivalInMonth, type Festival, makeSearch, openNow, placeUrl, where, MONTHS, ACCESS, VISIT, type IndexPlace, type Kind, type Meta } from './data'
+import { loadIndex, loadMeta, loadFestivals, festivalInMonth, type Festival, makeSearch, openNow, placeUrl, regionSlug, where, MONTHS, ACCESS, VISIT, type IndexPlace, type Kind, type Meta } from './data'
 
 const selectCls = 'h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-[15px]'
 
@@ -75,6 +75,14 @@ export default function List({ kind }: { kind: Kind }) {
           className="mx-5 flex items-center gap-3 px-4 py-3 rounded-2xl bg-plum text-white no-underline text-sm">
           <span aria-hidden="true">🎉</span>
           <span className="flex-1 min-w-0 truncate"><b>{festNow.length} {festNow.length === 1 ? 'festival' : 'festivals'} this month{region ? ` in ${region}` : ''}</b> · {festNow.slice(0, 2).map((f) => f.name).join(', ')}</span>
+          <span aria-hidden="true">›</span>
+        </Link>
+      )}
+
+      {region && (
+        <Link to={`/in/${regionSlug(region)}`} className="mx-5 flex items-center gap-3 px-4 py-3 rounded-2xl bg-white border border-stone-200 no-underline text-ink text-sm">
+          <span aria-hidden="true">🗺️</span>
+          <span className="flex-1 min-w-0"><b>Everything in {region}</b> · {dark ? 'places to see' : 'temples'}, festivals and a map</span>
           <span aria-hidden="true">›</span>
         </Link>
       )}

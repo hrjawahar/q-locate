@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
 import { Footer } from './Layout'
 import MiniSearch from 'minisearch'
-import { loadIndex, loadMovies, loadBooks, loadFestivals, loadMakers, type Maker, festivalInMonth, festivalOrder, makeSearch, savedPlaces, placeUrl, where, type IndexPlace, type Place, type Movie, type Book, type Festival } from './data'
+import { loadIndex, loadMovies, loadBooks, loadFestivals, loadMakers, type Maker, festivalInMonth, festivalOrder, makeSearch, savedPlaces, placeUrl, regionOf, regionSlug, where, type IndexPlace, type Place, type Movie, type Book, type Festival } from './data'
 import { CONFIG } from './config'
 import { snippet, processTerm, expand } from './searchkit'
 
@@ -43,6 +43,14 @@ export default function Home() {
     ...picks.f.search(expand(q)).slice(0, 4).map((r) => { const f = fests.find((x) => x.slug === r.id); return { kind: 'Festival', title: f?.name ?? '', to: `/festivals?month=all${f && f.country !== 'India' ? '&scope=intl' : ''}&q=${encodeURIComponent(f?.name ?? q)}` } }),
     ...picks.k.search(expand(q)).slice(0, 3).map((r) => { const m = makers.find((x) => x.slug === r.id); return { kind: 'Maker', title: m ? `${m.name} · ${m.products ?? ''}` : '', to: `/makers?q=${encodeURIComponent(m?.name ?? q)}` } }),
   ] : []
+  // Destinations (a state, or a country abroad) whose name matches: one page with everything there.
+  const dests = useMemo(() => {
+    const t = q.trim().toLowerCase()
+    if (t.length < 3) return [] as { name: string; n: number }[]
+    const count = new Map<string, number>()
+    for (const p of places) { const r = regionOf(p); if (r) count.set(r, (count.get(r) ?? 0) + 1) }
+    return [...count].filter(([r]) => r.toLowerCase().split(/[^a-z]+/).some((w) => w.startsWith(t)) || r.toLowerCase().startsWith(t)).slice(0, 2).map(([name, n]) => ({ name, n }))
+  }, [q, places])
   // Closest matches by meaning (online): things the exact words above didn't find.
   const sem = useSemantic(q)
   const online = useOnline()
@@ -69,11 +77,17 @@ export default function Home() {
         <label className="flex items-center gap-3 h-13 px-4 bg-white border border-stone-300 rounded-2xl">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B6B5E" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" /></svg>
           <input type="search" aria-label="Search places and temples" placeholder="Search places, temples, festivals…" value={q} onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && results[0]) nav(placeUrl(results[0])) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { if (dests[0]) nav(`/in/${regionSlug(dests[0].name)}`); else if (results[0]) nav(placeUrl(results[0])) } }}
             className="flex-1 h-12 bg-transparent outline-none text-base" />
         </label>
-        {(results.length > 0 || pickHits.length > 0 || closest.length > 0) && (
+        {(dests.length > 0 || results.length > 0 || pickHits.length > 0 || closest.length > 0) && (
           <ul className="absolute z-10 left-0 right-0 mt-2 list-none p-0 m-0 bg-white rounded-2xl border border-stone-200 shadow-lg overflow-hidden">
+            {dests.map((r) => (
+              <li key={`in${r.name}`}><Link to={`/in/${regionSlug(r.name)}`} className="flex items-center gap-3 px-4 py-3 no-underline text-ink hover:bg-stone-50 bg-forest/5">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-forest text-white">Destination</span>
+                <span className="flex-1 min-w-0"><span className="block font-semibold truncate">{r.name}</span><span className="block text-sm text-muted truncate">{r.n} {r.n === 1 ? 'place' : 'places'} · temples, festivals and a map</span></span>
+              </Link></li>
+            ))}
             {results.map((p) => (
               <li key={p.slug}><Link to={placeUrl(p)} className="flex items-center gap-3 px-4 py-3 no-underline text-ink hover:bg-stone-50">
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${p.kind === 'spiritual' ? 'bg-saffron/20 text-maroon' : 'bg-forest/10 text-forest'}`}>{p.kind === 'spiritual' ? 'Darshan' : 'Explore'}</span>

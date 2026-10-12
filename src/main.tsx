@@ -11,6 +11,7 @@ import Movies from './public/Movies'
 import Books from './public/Books'
 import Festivals from './public/Festivals'
 import Makers from './public/Makers'
+import Destination from './public/Destination'
 const AdminApp = lazy(() => import('./admin/AdminApp'))
 
 createRoot(document.getElementById('root')!).render(
@@ -24,6 +25,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/darshan" element={<List key="s" kind="spiritual" />} />
           <Route path="/v/:slug" element={<PlacePage />} />
           <Route path="/s/:slug" element={<PlacePage />} />
+          <Route path="/in/:region" element={<Destination />} />
           <Route path="/movies" element={<Movies />} />
           <Route path="/books" element={<Books />} />
           <Route path="/festivals" element={<Festivals />} />

@@ -69,3 +69,11 @@ Local test: `npx wrangler dev -c wrangler.admin.toml --var DEV_ADMIN_EMAIL:you@e
 - AI drafting: add a **Secret** `ANTHROPIC_API_KEY` to q-locate-admin (Settings → Variables and Secrets). Model is set by `AI_MODEL` in `wrangler.admin.toml`.
 - Importer: admin → Import. Queued places import every minute (cron, `IMPORT_BATCH` per run) or faster with "Import faster" while the page is open.
 - Sources: Wikidata (CC0), Wikipedia (reference text for AI only), Wikimedia Commons (photos with credit), OpenStreetMap via Overpass (ODbL, credited).
+
+## Coming later (planned)
+
+- **Plan my trip** — from a destination page (`/in/<state>`), the user ticks the places they want; the app groups
+  nearby ones into days (by map distance), shows a day-by-day list and makes one PDF for the whole trip.
+  Builds on the destination pages and the combined Nearby list (Oct 2026).
+- GeoNames account (`GEONAMES_USER`), report email and WhatsApp channel in `src/public/config.ts`.
+- Offline app install (PWA, Phase 6).

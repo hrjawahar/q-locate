@@ -10,6 +10,7 @@ import * as festivals from './festivals'
 import * as makers from './makers'
 import { suggestMoods } from './moodfill'
 import * as vectors from './vectors'
+import { resolveMapsLink } from './mapslink'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
 // every /api/admin call also checks the admins table.
@@ -51,6 +52,7 @@ export default {
       if (pathname === '/api/admin/upload' && m === 'POST') return api.upload(request, env, admin)
       if (pathname === '/api/admin/places/bulk' && m === 'POST') return api.bulkStatus(await body(), env, admin)
       if (pathname === '/api/admin/wikidata/search' && m === 'GET') return imp.wikidataSearch(url)
+      if (pathname === '/api/admin/maps-resolve' && m === 'GET') return json(await resolveMapsLink(url.searchParams.get('u') ?? ''))
       if (pathname === '/api/admin/search/status' && m === 'GET') return vectors.status(env)
       if (pathname === '/api/admin/search/rebuild' && m === 'POST' && admin.role === 'owner') return vectors.rebuild(env)
       if (pathname === '/api/admin/search/sync' && m === 'POST' && admin.role !== 'editor') return json({ done: await vectors.sync(env) })

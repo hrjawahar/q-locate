@@ -89,6 +89,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
   const [busy, setBusy] = useState(false)
   const [dupes, setDupes] = useState<{ id: number; name: string; state: string; status: string }[]>([])
   const [mapsText, setMapsText] = useState('')
+  const [resolving, setResolving] = useState(false)
   const [wdQuery, setWdQuery] = useState('')
   const [wdHits, setWdHits] = useState<{ id: string; label: string; description: string }[]>([])
 
@@ -330,7 +331,14 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           <Field label="Paste a Google Maps link or coordinates" hint="On Google Maps, long-press or right-click the spot, copy the numbers, paste here.">
             <div className="flex gap-2">
               <input className={inp} value={mapsText} onChange={(e) => setMapsText(e.target.value)} />
-              <button type="button" className={`${btn} border border-stone-300 bg-white`} onClick={() => { const c = parseMapsLink(mapsText); if (c) { setD({ ...d, place: { ...d.place, lat: c[0], lng: c[1] } }); setMapsText('') } else setMsg({ text: 'Could not read coordinates. Paste numbers like 10.2381, 77.4892.' }) }}>Use</button>
+              <button type="button" className={`${btn} border border-stone-300 bg-white`} disabled={resolving} onClick={async () => {
+                const setPin = (c: [number, number]) => { setD((cur) => cur && { ...cur, place: { ...cur.place, lat: c[0], lng: c[1] } }); setMapsText(''); setMsg({ text: 'Map pin set.', ok: true }) }
+                const c = parseMapsLink(mapsText); if (c) return setPin(c)
+                const fail = () => setMsg({ text: 'Could not find a pin in that link. On Google Maps, long-press the spot and paste the numbers (like 10.2381, 77.4892).' })
+                if (!/^https?:\/\//i.test(mapsText.trim())) return fail()
+                setResolving(true)
+                try { const r = await api(`/maps-resolve?u=${encodeURIComponent(mapsText.trim())}`) as { lat?: number; lng?: number }; if (r.lat != null && r.lng != null) setPin([r.lat, r.lng]); else fail() } catch { fail() } finally { setResolving(false) }
+              }}>{resolving ? 'Reading…' : 'Use'}</button>
             </div>
           </Field>
           <p className="m-0 text-sm">{d.place.lat && d.place.lng ? <>Pin set at <b>{Number(d.place.lat).toFixed(5)}, {Number(d.place.lng).toFixed(5)}</b>.</> : <b className="text-red-700">No map pin yet — paste a Google Maps link above.</b>}</p>

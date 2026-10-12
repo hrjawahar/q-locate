@@ -4,14 +4,19 @@ import { api, Me } from './api'
 
 const FICTION = ['Literary fiction', 'Thriller', 'Mystery', 'Crime', 'Romance', 'Fantasy', 'Sci-fi', 'Historical fiction', 'Humour', 'Classic', 'Short stories', 'Young adult']
 const NONFICTION = ['Biography', 'Memoir', 'Self-help', 'Business', 'Finance', 'History', 'Science', 'Psychology', 'Philosophy', 'Spirituality', 'Travel', 'Health', 'Poetry', 'True crime']
+const MOODS: Record<string, string> = {
+  low: 'Feeling low', anxious: 'Anxious or restless', lonely: 'Lonely', heartbroken: 'Heartbroken', grief: 'Grieving a loss',
+  stressed: 'Stressed at work', stuck: 'Lost or stuck', motivation: 'Need motivation', laugh: 'Want to laugh', escape: 'Want an escape',
+  curious: 'Curious', nostalgic: 'Nostalgic', inspired: 'Want to feel inspired',
+}
 const inp = 'h-11 w-full rounded-lg border border-stone-300 px-3 bg-white font-normal'
 const btn = 'h-11 px-4 rounded-lg font-semibold border border-stone-300 bg-white disabled:opacity-50'
 const hot = 'h-11 px-4 rounded-lg font-semibold bg-forest text-white disabled:opacity-50'
 const ST: Record<string, [string, string]> = { draft: ['Draft', 'bg-stone-100'], published: ['Published', 'bg-green-100 text-green-900'], archived: ['Archived', 'bg-stone-200 text-stone-500'] }
 
 interface Rec { handle: string; url: string; note: string }
-interface Draft { title: string; author: string | null; year: number | null; language: string | null; fiction: boolean | null; genres: string[]; topic: string | null; pages: number | null; pitch: string | null; wikidata_id: string | null; ai_pending?: string[]; status?: string }
-interface Row { id: number; title: string; author: string | null; year: number | null; genres: string; pages: number | null; status: string; ai_pending: string | null; recs: number }
+interface Draft { title: string; author: string | null; year: number | null; language: string | null; fiction: boolean | null; genres: string[]; topic: string | null; pages: number | null; pitch: string | null; wikidata_id: string | null; ai_pending?: string[]; status?: string; moods?: string[]; mood_note?: string | null }
+interface Row { id: number; title: string; author: string | null; year: number | null; genres: string; pages: number | null; status: string; ai_pending: string | null; recs: number; moods?: string | null }
 
 /** Add one book from a reel: title (+ author) + reviewer → Wikidata + AI draft → saved as a draft. */
 async function addOne(title: string, author: string, rec: Rec): Promise<{ id: number; existed: boolean }> {
@@ -85,6 +90,19 @@ export function BooksList({ me }: { me: Me }) {
         {msg && <p className="m-0 text-sm" role="status">{msg}</p>}
       </div>
 
+      {me.role !== 'editor' && rows && (() => {
+        const missing = rows.filter((r) => r.status === 'published' && !(JSON.parse(r.moods || '[]') as string[]).length)
+        return missing.length > 0 && (
+          <div className="p-3 rounded-xl bg-[#EEF3EC] flex flex-wrap items-center gap-3 text-sm">
+            <span className="flex-1">Bibliotherapy: <b>{missing.length}</b> published books have no moods yet.</span>
+            <button className={btn} disabled={!!busy} onClick={async () => {
+              let done = 0
+              for (const r of missing) { setBusy(`Suggesting moods ${++done} of ${missing.length}: ${r.title}… keep this page open.`); try { await api(`/books/${r.id}/moods`, { method: 'POST' }) } catch { /* keep going */ } }
+              setBusy(''); setMsg(`Moods suggested for ${missing.length} books. Open each one marked “AI draft — check” to confirm.`); load()
+            }}>Add moods with AI</button>
+          </div>
+        )
+      })()}
       <div className="flex flex-wrap gap-2">
         <input className={`${inp} flex-1 min-w-48`} placeholder="Search title, author, category" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className={`${inp} w-auto`} value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option><option value="draft">Drafts</option><option value="published">Published</option><option value="archived">Archived</option></select>
@@ -170,6 +188,19 @@ export function BookForm({ me }: { me: Me }) {
         </div>
       </fieldset>
       {field('Why read * (one line, no spoilers)', <textarea className="w-full min-h-20 rounded-lg border border-stone-300 p-3 font-normal" maxLength={220} value={m.pitch ?? ''} onChange={(e) => set('pitch', e.target.value)} />)}
+
+      <fieldset className="m-0 p-4 border-0 rounded-xl bg-[#EEF3EC] flex flex-col gap-2">
+        <legend className="sr-only">Moods</legend>
+        <div className="text-sm font-semibold">Bibliotherapy: moods this suits (2–4) {(m.ai_pending ?? []).includes('moods') && <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">AI suggestion — check</span>}</div>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(MOODS).map(([k, l]) => { const on = (m.moods ?? []).includes(k); return (
+            <button key={k} type="button" aria-pressed={on} onClick={() => set('moods', on ? (m.moods ?? []).filter((x) => x !== k) : [...(m.moods ?? []), k].slice(0, 4))}
+              className={`h-9 px-3 rounded-full border text-sm font-semibold ${on ? 'bg-forest text-white border-forest' : 'bg-white border-stone-300'}`}>{l}</button>) })}
+        </div>
+        <label className="flex flex-col gap-1 text-sm font-semibold">Why it may help (one gentle line)
+          <input className={inp} maxLength={200} placeholder="e.g. Warm, slow story about small joys — calming before sleep" value={m.mood_note ?? ''} onChange={(e) => set('mood_note', e.target.value)} /></label>
+        <p className="m-0 text-xs text-muted">Shown to users who pick these moods. Avoid anything that could make a mood worse.</p>
+      </fieldset>
 
       <div className="flex flex-col gap-2">
         <h2 className="m-0 text-lg font-semibold">Recommended by *</h2>

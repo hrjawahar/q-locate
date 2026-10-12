@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { loadMovies, runtime, type Movie } from './data'
 import { processTerm, expand } from './searchkit'
 import PicksSwitch from './PicksSwitch'
+import MoodBar, { MOODS } from './MoodBar'
 import { useSemantic } from './useSemantic'
 
 const LENGTHS: [string, string, (m: number) => boolean][] = [
@@ -16,15 +17,17 @@ export default function Movies() {
   const [all, setAll] = useState<Movie[] | null>(null)
   const [params] = useSearchParams()
   const [q, setQ] = useState(params.get('q') ?? '')
+  const [mood, setMood] = useState(params.get('mood') ?? ''), [feel, setFeel] = useState('')
+  const feelSem = useSemantic(feel, { private: true })
   const [genre, setGenre] = useState(''), [topic, setTopic] = useState(''), [lang, setLang] = useState(''), [country, setCountry] = useState('')
   const [len, setLen] = useState(''), [family, setFamily] = useState(false)
   const [pick, setPick] = useState<string | null>(null)
   useEffect(() => { loadMovies().then(setAll); document.title = 'Movie Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const ms = useMemo(() => {
-    const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch', 'who'], storeFields: ['slug'], processTerm,
+    const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch', 'who', 'moodText'], storeFields: ['slug'], processTerm,
       searchOptions: { prefix: true, fuzzy: 0.2, boost: { title: 4, genresText: 2, doc_topic: 2, country: 2 } } })
-    s.addAll((all ?? []).map((m) => ({ ...m, genresText: m.genres.join(' '), who: m.recs.map((r) => r.handle ?? '').join(' ') })))
+    s.addAll((all ?? []).map((m) => ({ ...m, genresText: m.genres.join(' '), who: m.recs.map((r) => r.handle ?? '').join(' '), moodText: [...(m.moods ?? []).map((k) => MOODS[k]), m.mood_note ?? ''].join(' ') })))
     return s
   }, [all])
   const genres = useMemo(() => [...new Set((all ?? []).flatMap((m) => m.genres))].sort(), [all])
@@ -34,17 +37,25 @@ export default function Movies() {
   const shown = useMemo(() => {
     let xs = all ?? []
     if (q.trim().length >= 2) { const ids = ms.search(expand(q)).map((r) => r.id as string); const rank = new Map(ids.map((s, i) => [s, i])); xs = xs.filter((m) => rank.has(m.slug)).sort((a, b) => rank.get(a.slug)! - rank.get(b.slug)!) }
+    // Mood chip: titles tagged for that mood. Own words: meaning-based matches first, then word matches.
+    if (mood) xs = xs.filter((m) => (m.moods ?? []).includes(mood))
+    if (feel.trim().length >= 3) {
+      const order = [...new Set([...feelSem.filter((h) => h.type === 'movie').map((h) => h.slug), ...ms.search(expand(feel)).map((r) => r.id as string)])]
+      const rank = new Map(order.map((s, i) => [s, i]))
+      xs = xs.filter((m) => rank.has(m.slug)).sort((a, b) => rank.get(a.slug)! - rank.get(b.slug)!)
+    }
     const lf = LENGTHS.find((l) => l[0] === len)?.[2]
     return xs.filter((m) => (!genre || m.genres.includes(genre)) && (!topic || m.doc_topic === topic)
       && (!lang || (lang === 'en' ? !m.subtitles : !!m.subtitles)) && (!country || (m.country ?? '').includes(country))
       && (!lf || (m.runtime_min != null && lf(m.runtime_min))) && (!family || m.family_friendly === true))
-  }, [all, ms, q, genre, topic, lang, country, len, family])
+  }, [all, ms, q, genre, topic, lang, country, len, family, mood, feel, feelSem])
+  const moodActive = !!mood || feel.trim().length >= 3
   const sem = useSemantic(q)
   const closest = useMemo(() => {
     const listed = new Set(shown.map((x) => x.slug))
     return sem.filter((h) => h.type === 'movie' && !listed.has(h.slug)).map((h) => (all ?? []).find((x) => x.slug === h.slug)).filter((x): x is Movie => !!x).slice(0, 6)
   }, [sem, shown, all])
-  const filtersOn = !!(genre || topic || lang || country || len || family || q)
+  const filtersOn = !!(genre || topic || lang || country || len || family || q || mood || feel)
 
   const surprise = () => {
     if (!shown.length) return
@@ -65,6 +76,8 @@ export default function Movies() {
       </header>
 
       <PicksSwitch />
+
+      <MoodBar kind="movie" mood={mood} setMood={setMood} feel={feel} setFeel={setFeel} />
 
       <div className="px-5 flex gap-2">
         <label className="flex-1 min-w-0 flex items-center gap-2 h-12 px-4 bg-white border border-stone-300 rounded-2xl">
@@ -93,10 +106,14 @@ export default function Movies() {
         <label className="h-11 flex items-center gap-2 px-3 rounded-xl border border-stone-300 bg-white text-[15px]"><input type="checkbox" className="w-5 h-5" checked={family} onChange={(e) => setFamily(e.target.checked)} />Family friendly</label>
       </div>
 
+      {moodActive && <h2 className="m-0 px-5 font-display text-lg font-semibold">Films {mood ? `for when you’re ${MOODS[mood].toLowerCase()}` : 'that may suit how you feel'}</h2>}
       <p className="m-0 px-5 text-sm text-muted" role="status">{all === null ? 'Loading…' : `${shown.length} ${shown.length === 1 ? 'movie' : 'movies'}`}
-        {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setGenre(''); setTopic(''); setLang(''); setCountry(''); setLen(''); setFamily(false) }}>Clear</button>}</p>
+        {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setGenre(''); setTopic(''); setLang(''); setCountry(''); setLen(''); setFamily(false); setMood(''); setFeel('') }}>Clear</button>}</p>
 
-      {all !== null && shown.length === 0 && closest.length === 0 && (
+      {all !== null && moodActive && shown.length === 0 && (
+        <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">No films matched for this mood yet.</p><p className="m-0 mt-1 text-sm text-muted">Try another mood or describe it differently.</p></div>
+      )}
+      {all !== null && !moodActive && shown.length === 0 && closest.length === 0 && (
         <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">{all.length ? 'Nothing matches.' : 'Movie Picks are coming soon.'}</p>
           {all.length > 0 && <p className="m-0 mt-1 text-sm text-muted">Try fewer filters.</p>}</div>
       )}
@@ -115,6 +132,7 @@ export default function Movies() {
               {m.family_friendly && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-900">Family friendly</span>}
             </div>
             {m.pitch && <p className="m-0 text-[16px] leading-relaxed">{m.pitch}</p>}
+            {moodActive && m.mood_note && <p className="m-0 text-sm p-3 rounded-xl bg-[#EEF3EC]"><b>Why it may help:</b> {m.mood_note}</p>}
             {m.recs.length > 0 && (
               <div className="text-sm flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-muted">Recommended by</span>

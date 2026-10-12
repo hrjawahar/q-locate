@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { loadBooks, type Book } from './data'
 import { processTerm, expand } from './searchkit'
 import PicksSwitch from './PicksSwitch'
+import MoodBar, { MOODS } from './MoodBar'
 import { useSemantic } from './useSemantic'
 
 const LENGTHS: [string, string, (p: number) => boolean][] = [
@@ -16,14 +17,16 @@ export default function Books() {
   const [all, setAll] = useState<Book[] | null>(null)
   const [params] = useSearchParams()
   const [q, setQ] = useState(params.get('q') ?? '')
+  const [mood, setMood] = useState(params.get('mood') ?? ''), [feel, setFeel] = useState('')
+  const feelSem = useSemantic(feel, { private: true })
   const [kind, setKind] = useState(''), [genre, setGenre] = useState(''), [len, setLen] = useState(''), [translated, setTranslated] = useState('')
   const [pick, setPick] = useState<string | null>(null)
   useEffect(() => { loadBooks().then(setAll); document.title = 'Book Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const ms = useMemo(() => {
-    const s = new MiniSearch<Book & { genresText: string; who: string }>({ idField: 'slug', fields: ['title', 'author', 'genresText', 'topic', 'pitch', 'language', 'who'], storeFields: ['slug'], processTerm,
+    const s = new MiniSearch<Book & { genresText: string; who: string; moodText: string }>({ idField: 'slug', fields: ['title', 'author', 'genresText', 'topic', 'pitch', 'language', 'who', 'moodText'], storeFields: ['slug'], processTerm,
       searchOptions: { prefix: true, fuzzy: 0.15, boost: { title: 4, author: 3, genresText: 2, topic: 2 } } })
-    s.addAll((all ?? []).map((b) => ({ ...b, genresText: b.genres.join(' '), who: b.recs.map((r) => r.handle ?? '').join(' ') })))
+    s.addAll((all ?? []).map((b) => ({ ...b, genresText: b.genres.join(' '), who: b.recs.map((r) => r.handle ?? '').join(' '), moodText: [...(b.moods ?? []).map((k) => MOODS[k]), b.mood_note ?? ''].join(' ') })))
     return s
   }, [all])
   const inKind = (b: Book) => !kind || (kind === 'f' ? b.fiction === true : b.fiction === false)
@@ -32,16 +35,24 @@ export default function Books() {
   const shown = useMemo(() => {
     let xs = all ?? []
     if (q.trim().length >= 2) { const ids = ms.search(expand(q)).map((r) => r.id as string); const rank = new Map(ids.map((s, i) => [s, i])); xs = xs.filter((b) => rank.has(b.slug)).sort((a, b) => rank.get(a.slug)! - rank.get(b.slug)!) }
+    // Mood chip: titles tagged for that mood. Own words: meaning-based matches first, then word matches.
+    if (mood) xs = xs.filter((b) => (b.moods ?? []).includes(mood))
+    if (feel.trim().length >= 3) {
+      const order = [...new Set([...feelSem.filter((h) => h.type === 'book').map((h) => h.slug), ...ms.search(expand(feel)).map((r) => r.id as string)])]
+      const rank = new Map(order.map((s, i) => [s, i]))
+      xs = xs.filter((b) => rank.has(b.slug)).sort((a, b) => rank.get(a.slug)! - rank.get(b.slug)!)
+    }
     const lf = LENGTHS.find((l) => l[0] === len)?.[2]
     return xs.filter((b) => inKind(b) && (!genre || b.genres.includes(genre)) && (!lf || (b.pages != null && lf(b.pages)))
       && (!translated || (translated === 'orig' ? !/translated/i.test(b.language ?? '') : /translated/i.test(b.language ?? ''))))
-  }, [all, ms, q, kind, genre, len, translated]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [all, ms, q, kind, genre, len, translated, mood, feel, feelSem]) // eslint-disable-line react-hooks/exhaustive-deps
+  const moodActive = !!mood || feel.trim().length >= 3
   const sem = useSemantic(q)
   const closest = useMemo(() => {
     const listed = new Set(shown.map((x) => x.slug))
     return sem.filter((h) => h.type === 'book' && !listed.has(h.slug)).map((h) => (all ?? []).find((x) => x.slug === h.slug)).filter((x): x is Book => !!x).slice(0, 6)
   }, [sem, shown, all])
-  const filtersOn = !!(kind || genre || len || translated || q)
+  const filtersOn = !!(kind || genre || len || translated || q || mood || feel)
 
   const surprise = () => {
     if (!shown.length) return
@@ -62,6 +73,8 @@ export default function Books() {
       </header>
 
       <PicksSwitch />
+
+      <MoodBar kind="book" mood={mood} setMood={setMood} feel={feel} setFeel={setFeel} />
 
       <div className="px-5 flex gap-2">
         <label className="flex-1 min-w-0 flex items-center gap-2 h-12 px-4 bg-white border border-stone-300 rounded-2xl">
@@ -84,10 +97,14 @@ export default function Books() {
         <select aria-label="Original or translated" className={sel} value={translated} onChange={(e) => setTranslated(e.target.value)}><option value="">Original or translated</option><option value="orig">Written in English</option><option value="tr">English translations</option></select>
       </div>
 
+      {moodActive && <h2 className="m-0 px-5 font-display text-lg font-semibold">Books {mood ? `for when you’re ${MOODS[mood].toLowerCase()}` : 'that may suit how you feel'}</h2>}
       <p className="m-0 px-5 text-sm text-muted" role="status">{all === null ? 'Loading…' : `${shown.length} ${shown.length === 1 ? 'book' : 'books'}`}
-        {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setKind(''); setGenre(''); setLen(''); setTranslated('') }}>Clear</button>}</p>
+        {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setKind(''); setGenre(''); setLen(''); setTranslated(''); setMood(''); setFeel('') }}>Clear</button>}</p>
 
-      {all !== null && shown.length === 0 && closest.length === 0 && (
+      {all !== null && moodActive && shown.length === 0 && (
+        <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">No books matched for this mood yet.</p><p className="m-0 mt-1 text-sm text-muted">Try another mood or describe it differently.</p></div>
+      )}
+      {all !== null && !moodActive && shown.length === 0 && closest.length === 0 && (
         <div className="mx-5 p-5 rounded-2xl bg-white text-center"><p className="m-0 font-semibold">{all.length ? 'Nothing matches.' : 'Book Picks are coming soon.'}</p>
           {all.length > 0 && <p className="m-0 mt-1 text-sm text-muted">Try fewer filters.</p>}</div>
       )}
@@ -106,6 +123,7 @@ export default function Books() {
               {b.topic && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-forest/10 text-forest">{b.topic}</span>}
             </div>
             {b.pitch && <p className="m-0 text-[16px] leading-relaxed">{b.pitch}</p>}
+            {moodActive && b.mood_note && <p className="m-0 text-sm p-3 rounded-xl bg-[#EEF3EC]"><b>Why it may help:</b> {b.mood_note}</p>}
             {b.recs.length > 0 && (
               <div className="text-sm flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-muted">Recommended by</span>

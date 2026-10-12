@@ -96,6 +96,7 @@ export interface Movie {
   slug: string; title: string; year: number | null; country: string | null; language: string | null; subtitles: string | null
   genres: string[]; doc_topic: string | null; runtime_min: number | null; pitch: string | null; family_friendly: boolean | null
   published_at: string | null; recs: { handle: string | null; url: string | null }[]
+  moods: string[]; mood_note: string | null
 }
 let moviesPromise: Promise<Movie[]> | null = null
 export function loadMovies(): Promise<Movie[]> {
@@ -111,6 +112,7 @@ export interface Book {
   slug: string; title: string; author: string | null; year: number | null; language: string | null; fiction: boolean | null
   genres: string[]; topic: string | null; pages: number | null; pitch: string | null; published_at: string | null
   recs: { handle: string | null; url: string | null }[]
+  moods: string[]; mood_note: string | null
 }
 let booksPromise: Promise<Book[]> | null = null
 export function loadBooks(): Promise<Book[]> {

@@ -15,20 +15,20 @@ export function useOnline() {
 }
 
 /** "Closest matches" by meaning for a search (online only; quietly empty offline or on error). */
-export function useSemantic(q: string): SemHit[] {
+export function useSemantic(q: string, opts: { private?: boolean } = {}): SemHit[] {
   const [hits, setHits] = useState<SemHit[]>([])
   const key = q.replace(/\s+/g, ' ').trim().toLowerCase()
   useEffect(() => {
     if (key.length < 3 || !navigator.onLine) { setHits([]); return }
-    if (cache.has(key)) { setHits(cache.get(key)!); return }
+    if (!opts.private && cache.has(key)) { setHits(cache.get(key)!); return }
     let stop = false
     const t = setTimeout(() => {
-      fetch(`/api/semantic?q=${encodeURIComponent(key)}`)
+      fetch(`/api/semantic?q=${encodeURIComponent(key)}${opts.private ? '&private=1' : ''}`, opts.private ? { cache: 'no-store' } : undefined)
         .then((r) => (r.ok ? r.json() : { results: [] }))
-        .then((d: { results?: SemHit[] }) => { const xs = d.results ?? []; cache.set(key, xs); if (!stop) setHits(xs) })
+        .then((d: { results?: SemHit[] }) => { const xs = d.results ?? []; if (!opts.private) cache.set(key, xs); if (!stop) setHits(xs) })
         .catch(() => { if (!stop) setHits([]) })
     }, 450)
     return () => { stop = true; clearTimeout(t) }
-  }, [key])
+  }, [key, opts.private])
   return hits
 }

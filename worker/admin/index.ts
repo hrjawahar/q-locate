@@ -8,6 +8,7 @@ import * as movies from './movies'
 import * as books from './books'
 import * as festivals from './festivals'
 import * as makers from './makers'
+import { suggestMoods } from './moodfill'
 import * as vectors from './vectors'
 
 // Admin app (q-locate-admin): the whole address is locked by Cloudflare Access;
@@ -79,7 +80,7 @@ export default {
       }
       if (pathname.startsWith('/api/admin/books')) {
         if (admin.scope !== 'all') return json({ error: 'Book Picks needs an admin with access to all sections' }, { status: 403 })
-        const bm = pathname.match(/^\/api\/admin\/books\/(\d+)(\/(status|recs))?$/)
+        const bm = pathname.match(/^\/api\/admin\/books\/(\d+)(\/(status|recs|moods))?$/)
         if (pathname === '/api/admin/books' && m === 'GET') return books.list(url, env)
         if (pathname === '/api/admin/books' && m === 'POST') return books.save(null, await body(), env, admin)
         if (pathname === '/api/admin/books/fill' && m === 'POST') return books.fill(await body(), env)
@@ -88,10 +89,11 @@ export default {
         if (bm && !bm[2] && m === 'DELETE') return books.remove(Number(bm[1]), env, admin)
         if (bm && bm[3] === 'status' && m === 'POST') return books.setStatus(Number(bm[1]), await body(), env, admin)
         if (bm && bm[3] === 'recs' && m === 'POST') return books.addRec(Number(bm[1]), await body(), env, admin)
+        if (bm && bm[3] === 'moods' && m === 'POST') return suggestMoods('book', Number(bm[1]), env, admin)
       }
       if (pathname.startsWith('/api/admin/movies')) {
         if (admin.scope !== 'all') return json({ error: 'Movie Picks needs an admin with access to all sections' }, { status: 403 })
-        const mm = pathname.match(/^\/api\/admin\/movies\/(\d+)(\/(status|recs))?$/)
+        const mm = pathname.match(/^\/api\/admin\/movies\/(\d+)(\/(status|recs|moods))?$/)
         if (pathname === '/api/admin/movies' && m === 'GET') return movies.list(url, env)
         if (pathname === '/api/admin/movies' && m === 'POST') return movies.save(null, await body(), env, admin)
         if (pathname === '/api/admin/movies/fill' && m === 'POST') return movies.fill(await body(), env)
@@ -100,6 +102,7 @@ export default {
         if (mm && !mm[2] && m === 'DELETE') return movies.remove(Number(mm[1]), env, admin)
         if (mm && mm[3] === 'status' && m === 'POST') return movies.setStatus(Number(mm[1]), await body(), env, admin)
         if (mm && mm[3] === 'recs' && m === 'POST') return movies.addRec(Number(mm[1]), await body(), env, admin)
+        if (mm && mm[3] === 'moods' && m === 'POST') return suggestMoods('movie', Number(mm[1]), env, admin)
       }
       if (pathname.startsWith('/api/admin/tracker')) {
         if (admin.role === 'editor' || (admin.scope !== 'all' && admin.scope !== 'spiritual')) return json({ error: 'Not available for your role' }, { status: 403 })

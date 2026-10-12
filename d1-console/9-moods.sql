@@ -1,0 +1,4 @@
+ALTER TABLE books ADD COLUMN moods TEXT;
+ALTER TABLE books ADD COLUMN mood_note TEXT;
+ALTER TABLE movies ADD COLUMN moods TEXT;
+ALTER TABLE movies ADD COLUMN mood_note TEXT;

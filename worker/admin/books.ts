@@ -3,13 +3,14 @@
 import { json, parseJson } from '../util'
 import { type AdminEnv, type Admin, canPublish } from './auth'
 import { sparql, wdSearch, type WdHit } from './sources'
+import { MOODS, MOOD_PROMPT, moodKeys } from '../moods'
 
 type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; AI_WEB_SEARCH?: string }
 
 export const FICTION = ['Literary fiction', 'Thriller', 'Mystery', 'Crime', 'Romance', 'Fantasy', 'Sci-fi', 'Historical fiction', 'Humour', 'Classic', 'Short stories', 'Young adult']
 export const NONFICTION = ['Biography', 'Memoir', 'Self-help', 'Business', 'Finance', 'History', 'Science', 'Psychology', 'Philosophy', 'Spirituality', 'Travel', 'Health', 'Poetry', 'True crime']
 const GENRES = [...FICTION, ...NONFICTION]
-const FIELDS = ['title', 'author', 'year', 'language', 'fiction', 'genres', 'topic', 'pages', 'pitch', 'wikidata_id', 'ai_pending'] as const
+const FIELDS = ['title', 'author', 'year', 'language', 'fiction', 'genres', 'topic', 'pages', 'pitch', 'moods', 'mood_note', 'wikidata_id', 'ai_pending'] as const
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').slice(0, 70)
 const bump = (env: AdminEnv) => env.DB.prepare("INSERT INTO meta (key, value) VALUES ('books_version', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1")
@@ -24,7 +25,7 @@ export async function list(url: URL, env: AdminEnv) {
   const where: string[] = [], b: unknown[] = []
   if (status) { where.push('b.status = ?'); b.push(status) }
   for (const w of q.split(/\s+/).filter((x) => x.length > 1).slice(0, 5)) { where.push("(b.title || ' ' || COALESCE(b.author,'') || ' ' || COALESCE(b.genres,'') || ' ' || COALESCE(b.topic,'')) LIKE ?"); b.push(`%${w}%`) }
-  const { results } = await env.DB.prepare(`SELECT b.id, b.title, b.author, b.year, b.genres, b.pages, b.status, b.ai_pending, b.updated_at,
+  const { results } = await env.DB.prepare(`SELECT b.id, b.title, b.author, b.year, b.genres, b.pages, b.status, b.ai_pending, b.updated_at, b.moods,
       (SELECT count(*) FROM book_recs r WHERE r.book_id = b.id) AS recs
     FROM books b ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY b.updated_at DESC LIMIT 300`).bind(...b).all()
   return json({ books: results })
@@ -34,7 +35,7 @@ export async function get(id: number, env: AdminEnv) {
   const m = await env.DB.prepare('SELECT * FROM books WHERE id = ?').bind(id).first<Record<string, unknown>>()
   if (!m) return json({ error: 'not_found' }, { status: 404 })
   const { results } = await env.DB.prepare('SELECT handle, url, note FROM book_recs WHERE book_id = ? ORDER BY sort, id').bind(id).all()
-  return json({ book: { ...m, fiction: m.fiction == null ? null : !!m.fiction, genres: parseJson(m.genres, []), ai_pending: parseJson(m.ai_pending, []) }, recs: results })
+  return json({ book: { ...m, fiction: m.fiction == null ? null : !!m.fiction, genres: parseJson(m.genres, []), moods: parseJson(m.moods, []), ai_pending: parseJson(m.ai_pending, []) }, recs: results })
 }
 
 export async function save(id: number | null, body: Record<string, unknown>, env: AdminEnv, a: Admin) {
@@ -49,6 +50,7 @@ export async function save(id: number | null, body: Record<string, unknown>, env
     fiction: m.fiction === true || m.fiction === 1 ? 1 : m.fiction === false || m.fiction === 0 ? 0 : null,
     genres: JSON.stringify(Array.isArray(m.genres) ? m.genres.filter((g) => GENRES.includes(String(g))).slice(0, 4) : []),
     topic: clean(m.topic, 80), pages: num(m.pages), pitch: clean(m.pitch, 300),
+    moods: JSON.stringify(moodKeys(m.moods)), mood_note: clean(m.mood_note, 200),
     wikidata_id: typeof m.wikidata_id === 'string' && /^Q\d+$/.test(m.wikidata_id) ? m.wikidata_id : null,
     ai_pending: JSON.stringify(Array.isArray(m.ai_pending) ? m.ai_pending : []),
   }
@@ -145,7 +147,8 @@ const SCHEMA = `Return JSON:
 {"title": "common English title", "author": "author name(s)", "year": 0 (first published),
  "language": "\\"English\\" if written in English, else \\"English (translated from X)\\"", "fiction": true | false,
  "genres": ["1-3 from: ${GENRES.join(', ')}"], "topic": "for non-fiction only: the subject in 1-3 words, e.g. Habits, Investing, Mughal history; else \\"\\"",
- "pages": 0 (typical English edition, approximate), "pitch": ""}`
+ "pages": 0 (typical English edition, approximate), "pitch": "",
+ ${MOOD_PROMPT}}`
 
 export async function fill(body: Record<string, unknown>, env: Env) {
   const title = clean(body.title, 160)
@@ -201,8 +204,9 @@ export async function fill(body: Record<string, unknown>, env: Env) {
       topic: fiction ? null : s('topic', 80),
       pages: base.pages ?? (num(raw.pages) || null),
       pitch: s('pitch', 220),
+      moods: moodKeys(raw.moods), mood_note: s('mood_note', 200),
     }
-    return json({ draft, notes: [...notes, 'AI drafted category, pitch and details'] })
+    return json({ draft, notes: [...notes, 'AI drafted category, pitch, moods and details'] })
   } catch (e) {
     return json({ draft: base, notes: [...notes, `AI draft failed: ${(e as Error).message.slice(0, 80)}`] })
   }

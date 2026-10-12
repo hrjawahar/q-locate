@@ -3,12 +3,20 @@
 import { json, parseJson } from '../util'
 import type { AdminEnv } from './auth'
 import { embed, pack, ENSURE_TABLE, type SearchBindings } from '../embed'
+import { MOODS } from '../moods'
 
 type Env = AdminEnv & SearchBindings
 const BATCH = 40
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const join = (...xs: unknown[]) => xs.filter((x) => typeof x === 'string' ? x.trim() : x != null && x !== '').join('. ').replace(/\s+/g, ' ').slice(0, 2000)
+
+// Moods (once checked) help "describe how you feel" searches find the right titles.
+const moodText = (r: Record<string, unknown>) => {
+  if (parseJson<string[]>(r.ai_pending, []).includes('moods')) return ''
+  const m = parseJson<string[]>(r.moods, []).map((k) => MOODS[k]).filter(Boolean)
+  return m.length ? `Good for when you are: ${m.join(', ')}. ${r.mood_note ?? ''}` : ''
+}
 
 const SOURCES = {
   places: {
@@ -28,15 +36,15 @@ const SOURCES = {
   },
   movies: {
     prefix: 'm',
-    sql: 'SELECT id, status, updated_at, title, year, country, language, genres, doc_topic, pitch, runtime_min FROM movies',
+    sql: 'SELECT * FROM movies',
     text: (r: Record<string, unknown>) => join(`${r.title} (${r.year ?? ''} movie)`, parseJson<string[]>(r.genres, []).join(', '), r.doc_topic && `About ${r.doc_topic}`,
-      [r.country, r.language].filter(Boolean).join(', '), r.pitch),
+      [r.country, r.language].filter(Boolean).join(', '), r.pitch, moodText(r)),
   },
   books: {
     prefix: 'b',
-    sql: 'SELECT id, status, updated_at, title, author, year, language, fiction, genres, topic, pitch FROM books',
+    sql: 'SELECT * FROM books',
     text: (r: Record<string, unknown>) => join(`${r.title}, a ${r.fiction === 0 ? 'non-fiction ' : r.fiction === 1 ? 'fiction ' : ''}book by ${r.author ?? 'unknown author'}`,
-      parseJson<string[]>(r.genres, []).join(', '), r.topic && `About ${r.topic}`, r.pitch),
+      parseJson<string[]>(r.genres, []).join(', '), r.topic && `About ${r.topic}`, r.pitch, moodText(r)),
   },
   festivals: {
     prefix: 'f',

@@ -3,12 +3,13 @@
 import { json, parseJson } from '../util'
 import { type AdminEnv, type Admin, canPublish } from './auth'
 import { sparql, wdSearch, type WdHit } from './sources'
+import { MOOD_PROMPT, moodKeys } from '../moods'
 
 type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; AI_WEB_SEARCH?: string }
 
 export const GENRES = ['Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy',
   'History', 'Horror', 'Musical', 'Mystery', 'Romance', 'Sci-fi', 'Sports', 'Thriller', 'War', 'Western']
-const FIELDS = ['title', 'year', 'country', 'language', 'subtitles', 'genres', 'doc_topic', 'runtime_min', 'pitch', 'family_friendly', 'wikidata_id', 'ai_pending'] as const
+const FIELDS = ['title', 'year', 'country', 'language', 'subtitles', 'genres', 'doc_topic', 'runtime_min', 'pitch', 'family_friendly', 'moods', 'mood_note', 'wikidata_id', 'ai_pending'] as const
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').slice(0, 70)
 const bumpIndex = (env: AdminEnv) => env.DB.prepare("INSERT INTO meta (key, value) VALUES ('movies_version', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1")
@@ -22,7 +23,7 @@ export async function list(url: URL, env: AdminEnv) {
   const where: string[] = [], b: unknown[] = []
   if (status) { where.push('m.status = ?'); b.push(status) }
   for (const w of q.split(/\s+/).filter((x) => x.length > 1).slice(0, 5)) { where.push("(m.title || ' ' || COALESCE(m.country,'') || ' ' || COALESCE(m.genres,'')) LIKE ?"); b.push(`%${w}%`) }
-  const { results } = await env.DB.prepare(`SELECT m.id, m.title, m.year, m.country, m.genres, m.runtime_min, m.status, m.ai_pending, m.updated_at,
+  const { results } = await env.DB.prepare(`SELECT m.id, m.title, m.year, m.country, m.genres, m.runtime_min, m.status, m.ai_pending, m.updated_at, m.moods,
       (SELECT count(*) FROM movie_recs r WHERE r.movie_id = m.id) AS recs
     FROM movies m ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY m.updated_at DESC LIMIT 300`).bind(...b).all()
   return json({ movies: results })
@@ -32,7 +33,7 @@ export async function get(id: number, env: AdminEnv) {
   const m = await env.DB.prepare('SELECT * FROM movies WHERE id = ?').bind(id).first<Record<string, unknown>>()
   if (!m) return json({ error: 'not_found' }, { status: 404 })
   const { results } = await env.DB.prepare('SELECT handle, url, note FROM movie_recs WHERE movie_id = ? ORDER BY sort, id').bind(id).all()
-  return json({ movie: { ...m, genres: parseJson(m.genres, []), ai_pending: parseJson(m.ai_pending, []) }, recs: results })
+  return json({ movie: { ...m, genres: parseJson(m.genres, []), moods: parseJson(m.moods, []), ai_pending: parseJson(m.ai_pending, []) }, recs: results })
 }
 
 /** Create or update a movie and its recommendations. */
@@ -47,6 +48,7 @@ export async function save(id: number | null, body: Record<string, unknown>, env
   const v: Record<string, unknown> = {
     title, year: num(m.year), country: clean(m.country, 80), language: clean(m.language, 80), subtitles: clean(m.subtitles, 80),
     genres: JSON.stringify(genres), doc_topic: clean(m.doc_topic, 80), runtime_min: num(m.runtime_min), pitch: clean(m.pitch, 300),
+    moods: JSON.stringify(moodKeys(m.moods)), mood_note: clean(m.mood_note, 200),
     family_friendly: m.family_friendly === true || m.family_friendly === 1 ? 1 : m.family_friendly === false || m.family_friendly === 0 ? 0 : null,
     wikidata_id: typeof m.wikidata_id === 'string' && /^Q\d+$/.test(m.wikidata_id) ? m.wikidata_id : null,
     ai_pending: JSON.stringify(Array.isArray(m.ai_pending) ? m.ai_pending : []),
@@ -148,7 +150,8 @@ const SCHEMA = `Return JSON:
 {"title": "common English title", "year": 0, "country": "production country, e.g. South Korea", "language": "original language, e.g. Korean",
  "subtitles": "\\"English subtitles\\" if the original language is not English, else \\"\\"",
  "genres": ["1-3 from: ${GENRES.join(', ')}"], "doc_topic": "for documentaries only: the subject, 1-3 words, e.g. Aviation, Wildlife, Space; else \\"\\"",
- "runtime_min": 0, "pitch": "", "family_friendly": true | false | null}`
+ "runtime_min": 0, "pitch": "", "family_friendly": true | false | null,
+ ${MOOD_PROMPT}}`
 
 export async function fill(body: Record<string, unknown>, env: Env) {
   const title = clean(body.title, 160)
@@ -202,6 +205,7 @@ export async function fill(body: Record<string, unknown>, env: Env) {
       runtime_min: base.runtime_min ?? (num(raw.runtime_min) || null),
       pitch: s('pitch', 220),
       family_friendly: typeof raw.family_friendly === 'boolean' ? raw.family_friendly : null,
+      moods: moodKeys(raw.moods), mood_note: s('mood_note', 200),
     }
     if (draft.doc_topic && !draft.genres.includes('Documentary')) draft.doc_topic = null
     return json({ draft, notes: [...notes, 'AI drafted category, pitch and details'] })

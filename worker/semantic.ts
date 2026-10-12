@@ -33,7 +33,9 @@ export async function semantic(request: Request, env: Env & SearchBindings, ctx:
 
   const versions = await env.DB.prepare("SELECT group_concat(key || '=' || value, ';') AS v FROM meta WHERE key IN ('index_version', 'movies_version', 'books_version', 'festivals_version', 'makers_version', 'vec_version')").first<string>('v')
   const cacheKey = new Request(new URL(`/api/semantic?q=${encodeURIComponent(q)}&v=${encodeURIComponent(versions ?? '')}`, url).toString())
-  const cached = await caches.default.match(cacheKey)
+  // "private=1" (feelings typed on the mood bar): never cached or kept anywhere.
+  const priv = url.searchParams.get('private') === '1'
+  const cached = priv ? undefined : await caches.default.match(cacheKey)
   if (cached) return cached
   if (limited(request.headers.get('cf-connecting-ip') ?? 'anon')) return json({ error: 'Too many searches — try again in a minute' }, { status: 429 })
 
@@ -64,6 +66,7 @@ export async function semantic(request: Request, env: Env & SearchBindings, ctx:
     const r = find(b, id); return r && { type: 'book', slug: r.slug, score }
   }).filter(Boolean)
 
+  if (priv) return json({ results }, { headers: { 'cache-control': 'no-store' } })
   const out = json({ results }, { headers: { 'cache-control': 'public, max-age=600' } })
   ctx.waitUntil(caches.default.put(cacheKey, out.clone()))
   return out

@@ -259,11 +259,13 @@ function childStatements(env: Env, placeId: number, g: Gathered, only: { transpo
   if (g.sug && only.transport) g.sug.transport.forEach((t, i) => P('INSERT INTO place_transport (place_id, type, name, code, distance_km, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.type, t.name, t.code, t.distance_km, i))
   if (g.sug && only.stays) g.sug.stays.forEach((t, i) => P('INSERT INTO place_stays (place_id, name, type, distance_km, phone, booking_url, sort) VALUES (?, ?, ?, ?, ?, ?, ?)', placeId, t.name, t.type, t.distance_km, t.phone, t.booking_url, i))
   if (g.sug && only.eateries) g.sug.eateries.forEach((t, i) => P('INSERT INTO place_eateries (place_id, name, pure_veg, distance_km, phone, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.name, t.pure_veg, t.distance_km, t.phone, i))
-  if (only.nearby && !g.sug?.nearby.length && g.ai?.nearby_new) g.ai.nearby_new.forEach((t, i) =>
+  // Well-known sights from the AI's research go first (they're what visitors ask about), then map results, without duplicates.
+  const mapNames = new Set((g.sug?.nearby ?? []).map((n) => n.name.toLowerCase()))
+  if (only.nearby && g.ai?.nearby_new) g.ai.nearby_new.filter((t) => !mapNames.has(t.name.toLowerCase())).forEach((t, i) =>
     P('INSERT INTO place_nearby (place_id, name, kind, distance_km, what_to_expect, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.name, t.kind, t.distance_km, t.what_to_expect, i))
-  if (g.sug && only.nearby) g.sug.nearby.forEach((t, i) => {
+  if (g.sug && only.nearby) g.sug.nearby.slice(0, Math.max(0, 10 - (g.ai?.nearby_new?.length ?? 0))).forEach((t, i) => {
     const w = g.ai?.nearby?.find((n) => n.name.toLowerCase() === t.name.toLowerCase())?.what_to_expect ?? null
-    P('INSERT INTO place_nearby (place_id, name, kind, distance_km, what_to_expect, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.name, t.kind, t.distance_km, w, i)
+    P('INSERT INTO place_nearby (place_id, name, kind, distance_km, what_to_expect, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.name, t.kind, t.distance_km, w, 20 + i)
   })
   if (only.website && g.wd.website) P("INSERT INTO place_contacts (place_id, type, label, value) VALUES (?, 'website', 'Official website', ?)", placeId, g.wd.website)
   if (only.sources) {
@@ -281,7 +283,7 @@ function practicalStatements(env: Env, placeId: number, kind: Kind, g: Gathered,
   if (!pr) return []
   const ok = (k: string, v: unknown) => v != null && v !== '' && (overwrite || current?.[k] == null || current?.[k] === '')
   const set: Record<string, unknown> = {}
-  for (const k of ['access_effort', 'access_notes', 'timings', 'entry_fee'] as const) if (ok(k, pr[k])) set[k] = pr[k]
+  for (const k of ['access_effort', 'access_notes', 'timings', 'entry_fee', 'address'] as const) if (ok(k, pr[k])) set[k] = pr[k]
   const s: D1PreparedStatement[] = []
   const cols = Object.keys(set)
   if (cols.length) s.push(env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).bind(...cols.map((c) => set[c]), placeId))
@@ -303,7 +305,7 @@ function practicalStatements(env: Env, placeId: number, kind: Kind, g: Gathered,
 function aiFields(g: Gathered) {
   const f: string[] = []
   if (g.ai?.practical) f.push('practical')
-  if (g.ai?.nearby_new?.length && !g.sug?.nearby.length) f.push('nearby')
+  if (g.ai?.nearby_new?.length) f.push('nearby')
   if (g.ai?.summary) f.push('summary')
   if (g.ai?.highlights) f.push('highlights')
   if (g.ai?.how_to_reach) f.push('how_to_reach')
@@ -413,11 +415,19 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
   if (g.ai?.summary && replaceable('summary', !p.summary)) { set.summary = g.ai.summary; pending.add('summary') }
   if (g.ai?.highlights && replaceable('highlights', !hasHl)) { set.highlights = JSON.stringify(g.ai.highlights); pending.add('highlights') }
   if (g.ai?.how_to_reach && replaceable('how_to_reach', !p.how_to_reach)) { set.how_to_reach = g.ai.how_to_reach; pending.add('how_to_reach') }
-  if (g.ai?.nearby?.length || (empty[3] && g.ai?.nearby_new?.length && !g.sug?.nearby.length)) pending.add('nearby')
+  if (g.ai?.nearby?.length || (empty[3] && g.ai?.nearby_new?.length)) pending.add('nearby')
   const practicalOverwrite = untouched || pending.has('practical')
   if (g.ai?.practical) pending.add('practical')
   const nearbyNotes = empty[3] ? [] : (g.ai?.nearby ?? []).map((n) => env.DB.prepare(
     "UPDATE place_nearby SET what_to_expect = ? WHERE place_id = ? AND lower(name) = lower(?) AND (what_to_expect IS NULL OR what_to_expect = '')").bind(n.what_to_expect, id, n.name))
+  // Rewrite / untouched: add the AI's well-known nearby sights to an existing list, skipping names already there.
+  const extraNearby: D1PreparedStatement[] = []
+  if (!empty[3] && untouched && g.ai?.nearby_new?.length) {
+    const have = new Set(((await env.DB.prepare('SELECT lower(name) AS n FROM place_nearby WHERE place_id = ?').bind(id).all<{ n: string }>()).results).map((r) => r.n))
+    const add = g.ai.nearby_new.filter((t) => !have.has(t.name.toLowerCase()))
+    add.forEach((t, i) => extraNearby.push(env.DB.prepare('INSERT INTO place_nearby (place_id, name, kind, distance_km, what_to_expect, sort) VALUES (?, ?, ?, ?, ?, ?)').bind(id, t.name, t.kind, t.distance_km, t.what_to_expect, i - 50)))
+    if (add.length) pending.add('nearby')
+  }
   if (!p.cover_photo && g.photo) {
     const key = await storePhoto(env, g.photo, String(p.slug)).catch(() => null)
     if (key) { set.cover_photo = key; set.cover_credit = g.photo.credit }
@@ -428,6 +438,7 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
   await env.DB.batch([
     env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(...cols.map((c) => set[c]), actor, id),
     ...nearbyNotes,
+    ...extraNearby,
     ...(p.kind === 'spiritual' && g.wd.deity ? [env.DB.prepare("INSERT INTO temple_details (place_id, main_deity) VALUES (?, ?) ON CONFLICT(place_id) DO UPDATE SET main_deity = COALESCE(NULLIF(temple_details.main_deity, ''), excluded.main_deity)").bind(id, g.wd.deity)] : []),
     ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: false, website: empty[5] }),
     ...(await hasAutoSources(env, id) ? [] : childStatements(env, id, { ...g, ai: null }, { transport: false, stays: false, eateries: false, nearby: false, sources: true, website: false })),

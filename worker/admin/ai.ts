@@ -16,7 +16,7 @@ export interface AiFacts {
 }
 
 export interface AiPractical {
-  access_effort?: string; access_notes?: string; timings?: string; entry_fee?: string
+  access_effort?: string; access_notes?: string; timings?: string; entry_fee?: string; address?: string
   best_months?: number[]; typical_visit?: string
   dress_code?: string; festivals?: string; significance?: string; tradition?: string
 }
@@ -47,9 +47,9 @@ const schema = (kind: 'vacation' | 'spiritual') => `Return JSON with exactly the
  "highlights": ["3 to 5 specific, useful facts, each at most 14 words; no repeats of the summary"],
  "how_to_reach": "2-4 short sentences: nearest railway station with code, nearest town and the road/bus for the last stretch, airport; approximate distances",
  "nearby": [{"name": "exact name copied from the facts nearby list", "what_to_expect": "at most 14 words"}],
- "nearby_new": [{"name": "real place within about 40 km, only if the facts nearby list is empty", "kind": "${kind === 'spiritual' ? 'temple|waterfall|lake|peak|viewpoint|fort|attraction' : 'waterfall|lake|peak|viewpoint|temple|fort|beach|forest|attraction'}", "distance_km": 0, "what_to_expect": "at most 14 words"}],
+ "nearby_new": [{"name": "up to 6 well-known sights within about 30 km that visitors commonly combine with this place (from your research), not already in the facts nearby list", "kind": "${kind === 'spiritual' ? 'temple|waterfall|lake|peak|viewpoint|fort|attraction' : 'waterfall|lake|peak|viewpoint|temple|fort|beach|forest|attraction'}", "distance_km": 0, "what_to_expect": "at most 14 words"}],
  "practical": {"access_effort": "drive_up|short_walk|steps_climb|trek", "access_notes": "at most 120 characters, e.g. about 300 steps down to the pool",
-   "timings": "", "entry_fee": "",
+   "timings": "", "entry_fee": "", "address": "full postal address with PIN code, only if an official or reliable source states it",
    ${kind === 'vacation'
      ? '"best_months": [month numbers 1-12 when a source supports it], "typical_visit": "few_hours|1_day|2_3_days|week_plus"'
      : '"dress_code": "", "festivals": "main festivals, at most 120 characters", "significance": "at most 160 characters", "tradition": "Shaiva|Vaishnava|Shakta|Jain|Buddhist|Sikh|other"'}}}`
@@ -125,10 +125,10 @@ export function parseDraft(text: string, facts: AiFacts): AiDraft | null {
     .map((n) => ({ name: str(n?.name, 120), what_to_expect: str(n?.what_to_expect, 120) }))
     .filter((n) => n.name && n.what_to_expect && allowed.has(n.name.toLowerCase())) : []
   if (near.length) out.nearby = near
-  if (!allowed.size && Array.isArray(raw.nearby_new)) {
+  if (Array.isArray(raw.nearby_new)) {
     const nn = (raw.nearby_new as Record<string, unknown>[])
       .map((n) => ({ name: str(n?.name, 120), kind: str(n?.kind, 30) || 'attraction', distance_km: Math.round(Number(n?.distance_km) * 10) / 10, what_to_expect: str(n?.what_to_expect, 120) }))
-      .filter((n) => n.name && !/church|mosque|masjid|dargah|cathedral/i.test(n.name) && n.distance_km > 0 && n.distance_km <= 60)
+      .filter((n) => n.name && !allowed.has(n.name.toLowerCase()) && !/church|mosque|masjid|dargah|cathedral/i.test(n.name) && n.distance_km > 0 && n.distance_km <= 60)
       .slice(0, 6)
     if (nn.length) out.nearby_new = nn
   }
@@ -136,7 +136,7 @@ export function parseDraft(text: string, facts: AiFacts): AiDraft | null {
   const p: AiPractical = {}
   const ae = str(pr.access_effort, 20); if (ACCESS.includes(ae)) p.access_effort = ae
   const s = (k: keyof AiPractical, max: number) => { const v = str(pr[k], max); if (v) (p as Record<string, unknown>)[k] = v }
-  s('access_notes', 160); s('timings', 140); s('entry_fee', 140)
+  s('access_notes', 160); s('timings', 140); s('entry_fee', 140); s('address', 220)
   if (facts.kind === 'vacation') {
     const bm = Array.isArray(pr.best_months) ? [...new Set(pr.best_months.map(Number).filter((n) => n >= 1 && n <= 12))].sort((a, b) => a - b) : []
     if (bm.length && bm.length < 12) p.best_months = bm

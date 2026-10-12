@@ -4,7 +4,7 @@ import { AdminEnv, Admin, canPublish, inScope } from './auth'
 type Body = Record<string, unknown>
 
 const PLACE_FIELDS = ['kind', 'name', 'alt_names', 'country', 'state', 'district_city', 'city', 'lat', 'lng', 'summary',
-  'highlights', 'how_to_reach', 'amenities', 'amenities_notes', 'entry_fee', 'access_effort', 'access_notes', 'timings',
+  'highlights', 'how_to_reach', 'amenities', 'amenities_notes', 'entry_fee', 'access_effort', 'access_notes', 'timings', 'address',
   'tags', 'cover_photo', 'cover_credit', 'ai_pending'] as const
 const VAC_FIELDS = ['best_months', 'typical_visit', 'trek_grade', 'trek_notes'] as const
 const TEMPLE_FIELDS = ['main_deity', 'tradition', 'significance', 'darshan_hours', 'dress_code', 'festivals',

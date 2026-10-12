@@ -10,7 +10,7 @@ export const indexJson = async (request: Request, env: Env, ctx: ExecutionContex
 
   const { results } = await env.DB.prepare(`
     SELECT p.slug, p.kind, p.name, p.alt_names, p.country, p.state, p.district_city, p.city, p.tags,
-           p.access_effort, p.access_notes, p.cover_photo, p.summary, p.highlights, v.best_months, v.typical_visit, t.main_deity, t.darshan_hours,
+           p.access_effort, p.access_notes, p.address, p.cover_photo, p.summary, p.highlights, v.best_months, v.typical_visit, t.main_deity, t.darshan_hours,
            t.tradition, t.significance, t.festivals, t.prasadam, t.dress_code, t.photography, p.how_to_reach, p.timings, p.entry_fee,
            p.amenities_notes, v.trek_notes,
            (SELECT group_concat(n.name || ' ' || COALESCE(n.what_to_expect, ''), ' . ') FROM place_nearby n WHERE n.place_id = p.id) AS nearby_text,
@@ -52,7 +52,7 @@ export const indexJson = async (request: Request, env: Env, ctx: ExecutionContex
     // Everything a visitor might search by a word: summary, highlights, temple significance, festivals and so on.
     // Most important first (shown as the "why it matched" snippet), then everything else on the page.
     text: [r.summary, parseJson<string[]>(r.highlights, []).join('. '), r.significance, r.festivals, r.tradition, r.prasadam, r.dress_code, r.photography,
-      r.access_notes, r.category_names, r.circuit_names, r.timings, r.entry_fee, r.amenities_notes, r.trek_notes, r.how_to_reach,
+      r.access_notes, r.address, r.category_names, r.circuit_names, r.timings, r.entry_fee, r.amenities_notes, r.trek_notes, r.how_to_reach,
       r.nearby_text, r.transport_text, r.stays_text, r.eat_text]
       .filter((x) => typeof x === 'string' && x).join(' \n ').slice(0, 6000),
   }))

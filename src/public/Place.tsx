@@ -92,6 +92,11 @@ export default function PlacePage() {
         </div>
         <h1 className={`m-0 text-[28px] leading-tight font-bold ${dark ? 'font-serif text-maroon' : 'font-display tracking-tight'}`}>{p.name}</h1>
         <p className="m-0 text-muted">{where(p)}</p>
+        {p.address && (
+          <p className="m-0 text-sm flex items-start gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="shrink-0 mt-0.5"><path d="M12 21s-7-6.3-7-11.5A7 7 0 0 1 19 9.5C19 14.7 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
+            <span className="flex-1">{p.address}</span>
+            <button type="button" className="no-print text-xs font-semibold underline shrink-0" onClick={() => { navigator.clipboard?.writeText(p.address); flash('Address copied') }}>Copy</button></p>
+        )}
         {p.summary && <p className="m-0 text-[17px] leading-relaxed">{p.summary}</p>}
       </header>
 

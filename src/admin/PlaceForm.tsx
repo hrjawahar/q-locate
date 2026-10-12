@@ -331,6 +331,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Access effort"><select className={inp} value={d.place.access_effort ?? ''} onChange={(e) => setP('access_effort', e.target.value)}><option value="">Choose…</option>{ACCESS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
             <Field label="Access notes" hint="e.g. ~600 steps; winch and rope car available"><input className={inp} value={d.place.access_notes ?? ''} onChange={(e) => setP('access_notes', e.target.value)} /></Field>
+            <Field label="Full address" hint="As people would write it, with PIN code — shown to users above the map link" className="sm:col-span-2"><textarea className={area} rows={2} value={d.place.address ?? ''} onChange={(e) => setP('address', e.target.value)} /></Field>
             <Field label="Entry fee"><input className={inp} value={d.place.entry_fee ?? ''} onChange={(e) => setP('entry_fee', e.target.value)} /></Field>
             {kind === 'vacation' && <Field label="Opening hours"><input className={inp} value={d.place.timings ?? ''} onChange={(e) => setP('timings', e.target.value)} /></Field>}
           </div>

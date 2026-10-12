@@ -76,6 +76,7 @@ export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: strin
   y += 1
   text(p.name, 20, 'bold', dark ? ACC : INK)
   text(where(p), 10.5, 'normal', MUTED)
+  if (p.address) text(`Address: ${p.address}`, 9.5, 'normal', INK)
   y += 1
   text(p.summary, 11)
 

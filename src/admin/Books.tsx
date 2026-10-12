@@ -2,13 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, Me } from './api'
 
-const FICTION = ['Literary fiction', 'Thriller', 'Mystery', 'Crime', 'Romance', 'Fantasy', 'Sci-fi', 'Historical fiction', 'Humour', 'Classic', 'Short stories', 'Young adult']
-const NONFICTION = ['Biography', 'Memoir', 'Self-help', 'Business', 'Finance', 'History', 'Science', 'Psychology', 'Philosophy', 'Spirituality', 'Travel', 'Health', 'Poetry', 'True crime']
-const MOODS: Record<string, string> = {
-  low: 'Feeling low', anxious: 'Anxious or restless', lonely: 'Lonely', heartbroken: 'Heartbroken', grief: 'Grieving a loss',
-  stressed: 'Stressed at work', stuck: 'Lost or stuck', motivation: 'Need motivation', laugh: 'Want to laugh', escape: 'Want an escape',
-  curious: 'Curious', nostalgic: 'Nostalgic', inspired: 'Want to feel inspired',
-}
+import { BOOK_FICTION as FICTION, BOOK_NONFICTION as NONFICTION, MOODS } from '../../worker/moods'
 const inp = 'h-11 w-full rounded-lg border border-stone-300 px-3 bg-white font-normal'
 const btn = 'h-11 px-4 rounded-lg font-semibold border border-stone-300 bg-white disabled:opacity-50'
 const hot = 'h-11 px-4 rounded-lg font-semibold bg-forest text-white disabled:opacity-50'
@@ -92,14 +86,17 @@ export function BooksList({ me }: { me: Me }) {
 
       {me.role !== 'editor' && rows && (() => {
         const missing = rows.filter((r) => r.status === 'published' && !(JSON.parse(r.moods || '[]') as string[]).length)
-        return missing.length > 0 && (
+        const tagged = rows.filter((r) => r.status === 'published' && (JSON.parse(r.moods || '[]') as string[]).length)
+        const run = async (list: typeof rows, what: string) => {
+          let done = 0
+          for (const r of list) { setBusy(`Suggesting moods ${++done} of ${list.length}: ${r.title}… keep this page open.`); try { await api(`/books/${r.id}/moods`, { method: 'POST' }) } catch { /* keep going */ } }
+          setBusy(''); setMsg(`Moods suggested for ${list.length} books${what}. Open each one marked “AI draft — check” to confirm.`); load()
+        }
+        return (missing.length > 0 || tagged.length > 0) && (
           <div className="p-3 rounded-xl bg-[#EEF3EC] flex flex-wrap items-center gap-3 text-sm">
-            <span className="flex-1">Bibliotherapy: <b>{missing.length}</b> published books have no moods yet.</span>
-            <button className={btn} disabled={!!busy} onClick={async () => {
-              let done = 0
-              for (const r of missing) { setBusy(`Suggesting moods ${++done} of ${missing.length}: ${r.title}… keep this page open.`); try { await api(`/books/${r.id}/moods`, { method: 'POST' }) } catch { /* keep going */ } }
-              setBusy(''); setMsg(`Moods suggested for ${missing.length} books. Open each one marked “AI draft — check” to confirm.`); load()
-            }}>Add moods with AI</button>
+            <span className="flex-1">Bibliotherapy: {missing.length > 0 ? <><b>{missing.length}</b> published books have no moods yet.</> : <>All published books have moods. Re-check after the mood list changes.</>}</span>
+            {missing.length > 0 && <button className={btn} disabled={!!busy} onClick={() => run(missing, '')}>Add moods with AI</button>}
+            {tagged.length > 0 && <button className={`${btn} border border-stone-300 bg-white`} disabled={!!busy} onClick={() => run(tagged, ' (re-checked)')}>Re-check moods for {tagged.length} tagged</button>}
           </div>
         )
       })()}

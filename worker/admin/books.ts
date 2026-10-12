@@ -3,12 +3,12 @@
 import { json, parseJson } from '../util'
 import { type AdminEnv, type Admin, canPublish } from './auth'
 import { sparql, wdSearch, type WdHit } from './sources'
-import { MOODS, MOOD_PROMPT, moodKeys } from '../moods'
+import { MOODS, MOOD_PROMPT, moodKeys, BOOK_FICTION, BOOK_NONFICTION } from '../moods'
 
 type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; AI_WEB_SEARCH?: string }
 
-export const FICTION = ['Literary fiction', 'Thriller', 'Mystery', 'Crime', 'Romance', 'Fantasy', 'Sci-fi', 'Historical fiction', 'Humour', 'Classic', 'Short stories', 'Young adult']
-export const NONFICTION = ['Biography', 'Memoir', 'Self-help', 'Business', 'Finance', 'History', 'Science', 'Psychology', 'Philosophy', 'Spirituality', 'Travel', 'Health', 'Poetry', 'True crime']
+export const FICTION = BOOK_FICTION
+export const NONFICTION = BOOK_NONFICTION
 const GENRES = [...FICTION, ...NONFICTION]
 const FIELDS = ['title', 'author', 'year', 'language', 'fiction', 'genres', 'topic', 'pages', 'pitch', 'moods', 'mood_note', 'wikidata_id', 'ai_pending'] as const
 

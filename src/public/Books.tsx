@@ -97,7 +97,7 @@ export default function Books() {
         <select aria-label="Original or translated" className={sel} value={translated} onChange={(e) => setTranslated(e.target.value)}><option value="">Original or translated</option><option value="orig">Written in English</option><option value="tr">English translations</option></select>
       </div>
 
-      {moodActive && <h2 className="m-0 px-5 font-display text-lg font-semibold">Books {mood ? `for when you’re ${MOODS[mood].toLowerCase()}` : 'that may suit how you feel'}</h2>}
+      {moodActive && <h2 className="m-0 px-5 font-display text-lg font-semibold">Books {mood ? `for “${MOODS[mood]}”` : 'that may suit how you feel'}</h2>}
       <p className="m-0 px-5 text-sm text-muted" role="status">{all === null ? 'Loading…' : `${shown.length} ${shown.length === 1 ? 'book' : 'books'}`}
         {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setKind(''); setGenre(''); setLen(''); setTranslated(''); setMood(''); setFeel('') }}>Clear</button>}</p>
 

@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
-export const MOODS: Record<string, string> = {
-  low: 'Feeling low', anxious: 'Anxious or restless', lonely: 'Lonely', heartbroken: 'Heartbroken', grief: 'Grieving a loss',
-  stressed: 'Stressed at work', stuck: 'Lost or stuck', motivation: 'Need motivation', laugh: 'Want to laugh', escape: 'Want an escape',
-  curious: 'Curious', nostalgic: 'Nostalgic', inspired: 'Want to feel inspired',
-}
+import { MOODS, MOODS_HARD, MOODS_GOOD } from '../../worker/moods'
+export { MOODS }
 /** Moods where we add a gentle reminder that support is available. */
 const HEAVY = new Set(['low', 'grief', 'heartbroken', 'lonely'])
 // Words suggesting someone may be at risk (English and common Hindi/Tamil transliterations).
@@ -60,9 +57,14 @@ export default function MoodBar({ kind, mood, setMood, feel, setFeel }: { kind: 
         <h2 className="m-0 font-display text-lg font-semibold">How are you feeling today?</h2>
         <span className="text-sm text-muted"><Term kind={kind} /></span>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" role="group" aria-label="Moods">
-        {Object.entries(MOODS).map(([k, l]) => <button key={k} aria-pressed={mood === k} className={chip(mood === k)} onClick={() => setMood(mood === k ? '' : k)}>{l}</button>)}
-      </div>
+      {([['In the mood for…', MOODS_GOOD], ['Going through something', MOODS_HARD]] as const).map(([title, list]) => (
+        <div key={title} className="flex flex-col gap-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted">{title}</span>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" role="group" aria-label={title}>
+            {Object.entries(list).map(([k, l]) => <button key={k} aria-pressed={mood === k} className={chip(mood === k)} onClick={() => setMood(mood === k ? '' : k)}>{l}</button>)}
+          </div>
+        </div>
+      ))}
       <label className="flex items-center gap-2 h-11 px-3 bg-white border border-stone-300 rounded-xl">
         <span className="sr-only">Or describe how you feel</span>
         <input value={feel} onChange={(e) => setFeel(e.target.value)} placeholder="Or describe it in your own words…" className="flex-1 min-w-0 bg-transparent outline-none text-[15px]" />

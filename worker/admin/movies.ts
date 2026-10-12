@@ -3,12 +3,11 @@
 import { json, parseJson } from '../util'
 import { type AdminEnv, type Admin, canPublish } from './auth'
 import { sparql, wdSearch, type WdHit } from './sources'
-import { MOOD_PROMPT, moodKeys } from '../moods'
+import { MOOD_PROMPT, moodKeys, MOVIE_GENRES } from '../moods'
 
 type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; AI_WEB_SEARCH?: string }
 
-export const GENRES = ['Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy',
-  'History', 'Horror', 'Musical', 'Mystery', 'Romance', 'Sci-fi', 'Sports', 'Thriller', 'War', 'Western']
+export const GENRES = MOVIE_GENRES
 const FIELDS = ['title', 'year', 'country', 'language', 'subtitles', 'genres', 'doc_topic', 'runtime_min', 'pitch', 'family_friendly', 'moods', 'mood_note', 'wikidata_id', 'ai_pending'] as const
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').slice(0, 70)

@@ -106,7 +106,7 @@ export default function Movies() {
         <label className="h-11 flex items-center gap-2 px-3 rounded-xl border border-stone-300 bg-white text-[15px]"><input type="checkbox" className="w-5 h-5" checked={family} onChange={(e) => setFamily(e.target.checked)} />Family friendly</label>
       </div>
 
-      {moodActive && <h2 className="m-0 px-5 font-display text-lg font-semibold">Films {mood ? `for when you’re ${MOODS[mood].toLowerCase()}` : 'that may suit how you feel'}</h2>}
+      {moodActive && <h2 className="m-0 px-5 font-display text-lg font-semibold">Films {mood ? `for “${MOODS[mood]}”` : 'that may suit how you feel'}</h2>}
       <p className="m-0 px-5 text-sm text-muted" role="status">{all === null ? 'Loading…' : `${shown.length} ${shown.length === 1 ? 'movie' : 'movies'}`}
         {filtersOn && <button className="ml-3 underline" onClick={() => { setQ(''); setGenre(''); setTopic(''); setLang(''); setCountry(''); setLen(''); setFamily(false); setMood(''); setFeel('') }}>Clear</button>}</p>
 

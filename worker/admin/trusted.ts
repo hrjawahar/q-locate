@@ -5,7 +5,7 @@ export const NATIONAL = [
   'incredibleindia.gov.in (Incredible India, Ministry of Tourism)',
   'tourism.gov.in (Ministry of Tourism)',
   'asi.nic.in (Archaeological Survey of India: monuments, timings, entry fees)',
-  'the district\'s official website, <district>.nic.in, which usually has a "Tourism" or "Places of interest" page with addresses',
+  'the district\'s official website, <district>.nic.in: tourist places are at <district>.nic.in/tourist-place/<place-name>/ (address, how to reach, timings). Search "site:<district>.nic.in <place name>", or "site:nic.in <place name> tourist place" if the district site has a different name',
 ]
 
 // State tourism boards (India). Unknown states fall back to "the state's official tourism site".
@@ -51,7 +51,7 @@ export function sourceHints(state?: string | null, district?: string | null, cou
   const d = district ? district.toLowerCase().replace(/ district$/, '').replace(/[^a-z]+/g, '') : ''
   return [
     'Look first at these official sources (search with site: when useful):',
-    ...NATIONAL.map((x) => `- ${d ? x.replace('<district>', d) : x}`),
+    ...NATIONAL.map((x) => `- ${d ? x.replaceAll('<district>', d) : x}`),
     ...(s.length ? s.map((x) => `- ${x}`) : [`- the official tourism site of ${state || 'the state'}`]),
     '- the temple trust\'s or place\'s own official website, and the forest department for parks and sanctuaries',
     'Then Wikipedia and established newspapers. Prefer the newest page when sources disagree, and say the year.',

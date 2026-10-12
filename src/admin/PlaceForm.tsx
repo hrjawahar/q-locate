@@ -49,7 +49,17 @@ const small = 'h-10 px-3 rounded-lg border border-stone-300 bg-white text-sm fon
 function Field({ label, hint, children, className = '' }: { label: string; hint?: string; children: React.ReactNode; className?: string }) {
   return <label className={`flex flex-col gap-1 text-sm font-semibold ${className}`}>{label}{children}{hint && <span className="font-normal text-muted">{hint}</span>}</label>
 }
-function Section({ n, title, children, aside }: { n: number; title: string; children: React.ReactNode; aside?: React.ReactNode }) {
+function Section({ n, title, children, aside, optional, filled }: { n: number; title: string; children: React.ReactNode; aside?: React.ReactNode; optional?: boolean; filled?: boolean }) {
+  // Optional sections with nothing in them stay folded (users never see empty sections either).
+  if (optional) return (
+    <details open={filled} className="border border-stone-200 rounded-xl p-4 m-0 min-w-0 group">
+      <summary className="cursor-pointer font-display font-bold list-none flex items-center gap-2">
+        <span className="text-muted group-open:rotate-90 transition-transform" aria-hidden="true">▸</span>{n}. {title}
+        {!filled && <span className="text-xs font-normal text-muted">— optional, empty (hidden from users). Tap to add.</span>}
+      </summary>
+      <div className="flex flex-col gap-3 mt-3">{aside}{children}</div>
+    </details>
+  )
   return (
     <fieldset className="border border-stone-200 rounded-xl p-4 flex flex-col gap-3 m-0 min-w-0">
       <legend className="px-1 font-display font-bold">{n}. {title}</legend>
@@ -174,7 +184,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
       {aiPending.length > 0 && <p className="m-0 p-3 rounded-lg bg-amber-50 text-amber-900 text-sm">AI drafts to check before publishing: <b>{aiPending.join(', ').replace(/_/g, ' ')}</b>.</p>}
 
       <fieldset disabled={locked} className="contents">
-        <Section n={1} title="Location">
+        <Section n={1} title="Location" aside={<AiBadge field="names" />}>
           {isNew && me.scope === 'all' && (
             <div className="flex gap-2" role="radiogroup" aria-label="Tab">
               {[['vacation', 'Explore (vacation)'], ['spiritual', 'Darshan (spiritual)']].map(([k, l]) => (
@@ -185,7 +195,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           )}
           <Field label="Location name *"><input className={inp} required value={d.place.name ?? ''} onChange={(e) => setP('name', e.target.value)} onBlur={checkDupes} /></Field>
           {dupes.length > 0 && <p className="m-0 p-3 rounded-lg bg-amber-50 text-amber-900 text-sm">Possible duplicate: {dupes.map((x) => <Link key={x.id} to={`/admin/places/${x.id}`} className="mr-2">{x.name} ({x.state}, {STATUS_LABEL[x.status]})</Link>)}</p>}
-          <Field label="Other names / spellings" hint="Comma separated. Helps search, e.g. Ooty, Udhagamandalam, Udagai"><input className={inp} value={d.place.alt_names ?? ''} onChange={(e) => setP('alt_names', e.target.value)} /></Field>
+          <Field label="Other names / spellings" hint="Comma separated — include the name in Tamil, Telugu, Kannada, Malayalam and Hindi where known. Helps search, e.g. Ooty, Udhagamandalam, ஊட்டி"><input className={inp} value={d.place.alt_names ?? ''} onChange={(e) => setP('alt_names', e.target.value)} /></Field>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <Field label="Where"><select className={inp} value={abroad ? 'abroad' : 'India'} onChange={(e) => setP('country', e.target.value === 'India' ? 'India' : '')}><option value="India">India</option><option value="abroad">International</option></select></Field>
             {abroad
@@ -273,7 +283,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           <textarea className={area} aria-label="How to reach" value={d.place.how_to_reach ?? ''} onChange={(e) => setP('how_to_reach', e.target.value)} />
         </Section>
 
-        <Section n={7} title="Stay options">
+        <Section n={7} title="Stay options" optional filled={d.stays.length > 0}>
           <p className="m-0 text-sm text-muted">Users see: “Listed, not endorsed. Prices may vary at the time of your arrival.” Partner listings show a “Partner” label and are shown first.</p>
           {d.stays.map((s, i) => (
             <RowCard key={i} onRemove={() => removeRow('stays', i)}>
@@ -290,7 +300,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           <AddButton label="Add stay" onClick={() => setList('stays', [...d.stays, { currency: 'INR' }])} />
         </Section>
 
-        <Section n={8} title="Nearby eateries">
+        <Section n={8} title="Nearby eateries" optional filled={d.eateries.length > 0}>
           {d.eateries.map((s, i) => (
             <RowCard key={i} onRemove={() => removeRow('eateries', i)}>
               <Field label="Name" className="sm:col-span-3"><input className={inp} value={s.name ?? ''} onChange={(e) => setRow('eateries', i, 'name', e.target.value)} /></Field>
@@ -323,10 +333,12 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
               <button type="button" className={`${btn} border border-stone-300 bg-white`} onClick={() => { const c = parseMapsLink(mapsText); if (c) { setD({ ...d, place: { ...d.place, lat: c[0], lng: c[1] } }); setMapsText('') } else setMsg({ text: 'Could not read coordinates. Paste numbers like 10.2381, 77.4892.' }) }}>Use</button>
             </div>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <p className="m-0 text-sm">{d.place.lat && d.place.lng ? <>Pin set at <b>{Number(d.place.lat).toFixed(5)}, {Number(d.place.lng).toFixed(5)}</b>.</> : <b className="text-red-700">No map pin yet — paste a Google Maps link above.</b>}</p>
+          <details className="text-sm"><summary className="cursor-pointer text-muted">Edit coordinates by hand</summary>
+          <div className="grid grid-cols-2 gap-3 mt-2">
             <Field label="Latitude"><input className={inp} inputMode="decimal" value={d.place.lat ?? ''} onChange={(e) => setP('lat', e.target.value)} /></Field>
             <Field label="Longitude"><input className={inp} inputMode="decimal" value={d.place.lng ?? ''} onChange={(e) => setP('lng', e.target.value)} /></Field>
-          </div>
+          </div></details>
           {d.place.lat && d.place.lng && <a href={`https://www.google.com/maps/search/?api=1&query=${d.place.lat},${d.place.lng}`} target="_blank" rel="noreferrer" className="text-sm">Check this spot on Google Maps ↗</a>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Access effort"><select className={inp} value={d.place.access_effort ?? ''} onChange={(e) => setP('access_effort', e.target.value)}><option value="">Choose…</option>{ACCESS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
@@ -337,7 +349,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           </div>
         </Section>
 
-        <Section n={11} title="Amenities">
+        <Section n={11} title="Amenities" optional filled={(d.place.amenities as string[]).length > 0 || !!d.place.amenities_notes}>
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
             {AMENITIES.map(([k, l]) => <label key={k} className="flex items-center gap-2 min-h-11"><input type="checkbox" className="w-5 h-5" checked={(d.place.amenities as string[]).includes(k)}
               onChange={(e) => setP('amenities', e.target.checked ? [...d.place.amenities, k] : d.place.amenities.filter((x: string) => x !== k))} />{l}</label>)}

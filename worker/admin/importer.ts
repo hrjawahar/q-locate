@@ -1,6 +1,7 @@
 import { json, parseJson } from '../util'
 import type { AdminEnv, Admin } from './auth'
 import { gnWhere, gnNearby } from './geonames'
+import { missingScripts, SCRIPTS } from './scripts'
 import { wdPlace, wdSearch, resolveType, listByType, wikiExtract, commonsPhoto, download, overpass, suggestions, wdTransport, type WdPlace, type Suggestions, type Hub } from './sources'
 import { draftWithAi, type AiDraft } from './ai'
 
@@ -227,6 +228,8 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
     try {
       ai = await draftWithAi(env.ANTHROPIC_API_KEY, env.AI_MODEL || 'claude-haiku-4-5-20251001', {
         name: wd.name, kind,
+        // Indian places: ask for the name in the scripts Wikidata doesn't have yet.
+        names_needed: (wd.country ?? 'India') === 'India' ? missingScripts(wd.altNames) : [],
         location: [wd.city, wd.district, wd.state, wd.country].filter(Boolean).join(', '),
         description: wd.description, deity: wd.deity, wikipedia_extract: wiki?.text, wikidata_facts: wd.facts,
         transport: merged?.transport, nearby: merged?.nearby,
@@ -304,6 +307,7 @@ function practicalStatements(env: Env, placeId: number, kind: Kind, g: Gathered,
 
 function aiFields(g: Gathered) {
   const f: string[] = []
+  if (g.ai?.local_names?.length) f.push('names')
   if (g.ai?.practical) f.push('practical')
   if (g.ai?.nearby_new?.length) f.push('nearby')
   if (g.ai?.summary) f.push('summary')
@@ -342,7 +346,7 @@ async function importOne(env: Env, row: QueueRow): Promise<{ placeId: number | n
   const r = await env.DB.prepare(`INSERT INTO places (kind, slug, name, alt_names, country, state, district_city, city, lat, lng, summary, highlights, how_to_reach,
       cover_photo, cover_credit, wikidata_id, needs_review, ai_pending, status, created_by, updated_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'draft', 'importer', 'importer') RETURNING id`)
-    .bind(row.kind, slug, wd.name, wd.altNames.join(', ') || null, wd.country ?? 'India', wd.state, wd.district, wd.city, wd.lat, wd.lng,
+    .bind(row.kind, slug, wd.name, [...wd.altNames, ...(g.ai?.local_names ?? [])].join(', ') || null, wd.country ?? 'India', wd.state, wd.district, wd.city, wd.lat, wd.lng,
       g.ai?.summary ?? (wd.description ? wd.description.charAt(0).toUpperCase() + wd.description.slice(1) : null),
       JSON.stringify(g.ai?.highlights ?? []), g.ai?.how_to_reach ?? null, cover, cover ? g.photo!.credit : null, wd.id, JSON.stringify(aiFields(g)))
     .first<number>('id')
@@ -404,7 +408,13 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
   const pending = new Set(parseJson<string[]>(p.ai_pending, []))
   const set: Record<string, unknown> = { wikidata_id: wikidataId }
   const fill = (k: string, v: unknown) => { if ((p[k] == null || p[k] === '') && v != null && v !== '') set[k] = v }
-  fill('alt_names', g.wd.altNames.join(', ') || null)
+  // Other names: keep what's there and add any script (Tamil, Telugu, Kannada, Malayalam, Hindi) still missing.
+  {
+    const have = String(p.alt_names ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+    const fresh = [...g.wd.altNames, ...(g.ai?.local_names ?? [])].filter((n) => !have.some((h) => h.toLowerCase() === n.toLowerCase()))
+    const add = have.length ? fresh.filter((n) => Object.values(SCRIPTS).some((sc) => sc.re.test(n) && !have.some((h) => sc.re.test(h)))) : fresh
+    if (add.length) { set.alt_names = [...have, ...add].join(', '); if (add.some((n) => g.ai?.local_names?.includes(n))) pending.add('names') }
+  }
   fill('state', g.wd.state); fill('district_city', g.wd.district); fill('city', g.wd.city)
   fill('lat', g.wd.lat); fill('lng', g.wd.lng)
   // Text may be replaced when empty, still an unchecked AI draft, or written by the importer and untouched since.

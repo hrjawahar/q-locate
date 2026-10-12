@@ -76,9 +76,12 @@ export async function downloadPlacePdf(p: Place, pageUrl: string, mapsUrl: strin
   y += 1
   text(p.name, 20, 'bold', dark ? ACC : INK)
   text(where(p), 10.5, 'normal', MUTED)
+  { const latin = String(p.alt_names ?? '').split(',').map((n) => n.trim()).filter((n) => n && /^[\x20-\xFF]+$/.test(n)); if (latin.length) text(`Also known as: ${latin.join(', ')}`, 9, 'normal', MUTED) }
   if (p.address) text(`Address: ${p.address}`, 9.5, 'normal', INK)
   y += 1
   text(p.summary, 11)
+  y += 1
+  text(`Please confirm before you travel: timings, prices, access and contacts can change. Verify with the ${dark ? 'temple' : 'place'} or official sources for any recent changes.`, 8.5, 'bold', [138, 90, 20])
 
   const d = p.details ?? {}
   if ((p.highlights ?? []).length) { heading('Highlights'); p.highlights.forEach((h: string) => bullet(h)) }

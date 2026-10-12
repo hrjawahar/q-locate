@@ -101,7 +101,7 @@ export async function wdPlace(id: string): Promise<WdPlace> {
   const rows = await sparql(`SELECT ?item (SAMPLE(?l) AS ?label) (SAMPLE(?d) AS ?desc) (SAMPLE(?c) AS ?coord) (SAMPLE(?cl) AS ?country)
  (SAMPLE(?img) AS ?image) (SAMPLE(?web) AS ?website) (SAMPLE(?t) AS ?wiki) (SAMPLE(?dl) AS ?deity) (SAMPLE(?elev) AS ?elevation) (SAMPLE(?inc) AS ?inception) (SAMPLE(?stl) AS ?style) (SAMPLE(?hl) AS ?heritage) (SAMPLE(?tl) AS ?instance)
  (SAMPLE(?a1l) AS ?adm1) (SAMPLE(?a2l) AS ?adm2) (SAMPLE(?a3l) AS ?adm3) (SAMPLE(?a4l) AS ?adm4)
- (GROUP_CONCAT(DISTINCT ?al; separator="|") AS ?aliases) (SAMPLE(?ta) AS ?taLabel) (SAMPLE(?hi) AS ?hiLabel) WHERE {
+ (GROUP_CONCAT(DISTINCT ?al; separator="|") AS ?aliases) (SAMPLE(?ta) AS ?taLabel) (SAMPLE(?hi) AS ?hiLabel) (SAMPLE(?te) AS ?teLabel) (SAMPLE(?kn) AS ?knLabel) (SAMPLE(?ml) AS ?mlLabel) WHERE {
  VALUES ?item { wd:${qid(id)} }
  OPTIONAL { ?item rdfs:label ?l FILTER(lang(?l)="en") }
  OPTIONAL { ?item schema:description ?d FILTER(lang(?d)="en") }
@@ -123,6 +123,9 @@ export async function wdPlace(id: string): Promise<WdPlace> {
  OPTIONAL { ?item skos:altLabel ?al FILTER(lang(?al)="en") }
  OPTIONAL { ?item rdfs:label ?ta FILTER(lang(?ta)="ta") }
  OPTIONAL { ?item rdfs:label ?hi FILTER(lang(?hi)="hi") }
+ OPTIONAL { ?item rdfs:label ?te FILTER(lang(?te)="te") }
+ OPTIONAL { ?item rdfs:label ?kn FILTER(lang(?kn)="kn") }
+ OPTIONAL { ?item rdfs:label ?ml FILTER(lang(?ml)="ml") }
 } GROUP BY ?item`)
   const r = rows[0] ?? {}
   const v = (k: string) => r[k]?.value || null
@@ -130,10 +133,10 @@ export async function wdPlace(id: string): Promise<WdPlace> {
   const country = v('country')
   const adm = placeAdmin([v('adm1'), v('adm2'), v('adm3'), v('adm4')].filter((x): x is string => !!x), country)
   const name = v('label') ?? id
-  const alt = [...(v('aliases')?.split('|') ?? []), v('taLabel'), v('hiLabel')]
+  const alt = [...(v('aliases')?.split('|') ?? []), v('taLabel'), v('teLabel'), v('knLabel'), v('mlLabel'), v('hiLabel')]
     .filter((x): x is string => !!x && x !== name)
   return {
-    id, name, description: v('desc') ?? '', altNames: [...new Set(alt)].slice(0, 8),
+    id, name, description: v('desc') ?? '', altNames: [...new Set(alt)].slice(0, 12),
     lat: pt?.[0] ?? null, lng: pt?.[1] ?? null, country, ...adm,
     image: v('image'), website: v('website'), wikiTitle: v('wiki'), deity: v('deity'),
     facts: Object.fromEntries(Object.entries({

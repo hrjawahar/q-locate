@@ -2,6 +2,7 @@
 // (official, government, tourism-board, temple-trust and reputable news sites). Everything it fills
 // is marked "AI draft — verify" until an admin checks it, and the pages it used are kept for checking.
 
+import { validScriptNames } from './scripts'
 export interface AiFacts {
   name: string
   kind: 'vacation' | 'spiritual'
@@ -13,6 +14,7 @@ export interface AiFacts {
   transport?: { type: string; name: string; code?: string | null; distance_km: number }[]
   nearby?: { name: string; kind: string; distance_km: number }[]
   existing_highlights?: string[]
+  names_needed?: string[] // script codes still missing, e.g. ['te','kn','ml']
 }
 
 export interface AiPractical {
@@ -29,6 +31,7 @@ export interface AiDraft {
   nearby_new?: { name: string; kind: string; distance_km: number; what_to_expect: string }[]
   practical?: AiPractical
   refs?: { url: string; title: string }[]
+  local_names?: string[]
 }
 
 const SYSTEM = `You research and write short, practical notes for Q-Locate, a quick location guide for budget travellers, backpackers and pilgrims.
@@ -66,7 +69,7 @@ async function call(apiKey: string, model: string, facts: AiFacts, web: boolean)
       max_tokens: 2000,
       system: SYSTEM,
       ...(web ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }] } : { temperature: 0 }),
-      messages: [{ role: 'user', content: `${schema(facts.kind)}\n\nPlace: ${facts.name} (${facts.location})\n\nFacts:\n${JSON.stringify(facts)}` }],
+      messages: [{ role: 'user', content: `${schema(facts.kind)}${facts.names_needed?.length ? `\nAlso add the key "local_names": {${facts.names_needed.map((k) => `"${k}": ""`).join(', ')}} — the place's name as written in ${facts.names_needed.map((k) => ({ ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', hi: 'Hindi' } as Record<string, string>)[k]).join(', ')} script (as used on signboards or official sites; a careful transliteration of the proper name if none is published).` : ''}\n\nPlace: ${facts.name} (${facts.location})\n\nFacts:\n${JSON.stringify(facts)}` }],
     }),
   })
 }
@@ -143,5 +146,7 @@ export function parseDraft(text: string, facts: AiFacts): AiDraft | null {
     const tv = str(pr.typical_visit, 20); if (VISIT.includes(tv)) p.typical_visit = tv
   } else { s('dress_code', 160); s('festivals', 160); s('significance', 200); s('tradition', 30) }
   if (Object.keys(p).length) out.practical = p
+  const ln = validScriptNames(raw.local_names, facts.names_needed ?? [])
+  if (ln.length) out.local_names = ln
   return out
 }

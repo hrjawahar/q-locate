@@ -236,7 +236,7 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
         description: wd.description, deity: wd.deity, wikipedia_extract: wiki?.text, wikidata_facts: wd.facts,
         transport: merged?.transport, nearby: merged?.nearby,
       }, notes, env.AI_WEB_SEARCH !== 'off')
-    } catch (e) { notes.push(`AI draft failed: ${(e as Error).message.slice(0, 80)}`) }
+    } catch (e) { notes.push(`AI draft failed: ${(e as Error).message.slice(0, 140)}`) }
   }
   if (ai) {
     const got = [ai.summary && 'summary', ai.highlights && `${ai.highlights.length} highlights`, ai.how_to_reach && 'how to reach', ai.nearby?.length && 'nearby notes',

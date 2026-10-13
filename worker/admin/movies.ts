@@ -2,6 +2,7 @@
 // the rest drafted by AI (with web research) and checked by an admin before publishing.
 import { json, parseJson } from '../util'
 import { lastJson } from './jsonpick'
+import { aiFetch, aiError } from './anthropic'
 import { type AdminEnv, type Admin, canPublish } from './auth'
 import { sparql, wdSearch, type WdHit } from './sources'
 import { MOOD_PROMPT, moodKeys, MOVIE_GENRES, SETTING_PROMPT } from '../moods'
@@ -184,20 +185,16 @@ export async function fill(body: Record<string, unknown>, env: Env) {
   const notes: string[] = [wd ? `Matched Wikidata ${wd.id} (${wd.description})` : 'Not found on Wikidata; AI filled everything — check carefully']
   if (!env.ANTHROPIC_API_KEY) return json({ draft: base, notes: [...notes, 'AI is off (no ANTHROPIC_API_KEY)'] })
 
-  const ask = (web: boolean) => fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST', signal: AbortSignal.timeout(web ? 120_000 : 60_000),
-    headers: { 'x-api-key': env.ANTHROPIC_API_KEY!.trim().replace(/^["']|["']$/g, ''), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({
+  const ask = (web: boolean) => aiFetch(env.ANTHROPIC_API_KEY!, {
       model: env.AI_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM,
       ...(web ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] } : { temperature: 0 }),
       messages: [{ role: 'user', content: `${SCHEMA}\n\nMovie: ${title}${year ? ` (${year})` : ''}\nFacts: ${JSON.stringify({ wikidata: wd, reviewer_note: clean(body.note, 300) })}` }],
-    }),
-  })
+    }, web ? 120_000 : 60_000)
   // Read one reply; returns null if the model's answer can't be read.
   const attempt = async (web: boolean) => {
     let res = await ask(web)
     if (!res.ok && web && res.status === 400) res = await ask(false)
-    if (!res.ok) throw new Error(`AI answered ${res.status}`)
+    if (!res.ok) throw new Error(await aiError(res))
     const blocks = ((await res.json()) as { content?: { type: string; text?: string }[] }).content ?? []
     return lastJson(blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''), ['pitch', 'genres', 'moods'])
   }
@@ -225,6 +222,6 @@ export async function fill(body: Record<string, unknown>, env: Env) {
     if (draft.doc_topic && !draft.genres.includes('Documentary')) draft.doc_topic = null
     return json({ draft, notes: [...notes, 'AI drafted category, pitch and details'] })
   } catch (e) {
-    return json({ draft: base, notes: [...notes, `AI draft failed: ${(e as Error).message.slice(0, 80)}`] })
+    return json({ draft: base, notes: [...notes, `AI draft failed: ${(e as Error).message.slice(0, 140)}`] })
   }
 }

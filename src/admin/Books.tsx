@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, Me } from './api'
 
 import { BOOK_FICTION as FICTION, BOOK_NONFICTION as NONFICTION, MOODS } from '../../worker/moods'
@@ -13,14 +13,14 @@ interface Draft { title: string; author: string | null; year: number | null; lan
 interface Row { id: number; title: string; author: string | null; year: number | null; genres: string; pages: number | null; status: string; ai_pending: string | null; recs: number; moods?: string | null }
 
 /** Add one book from a reel: title (+ author) + reviewer → Wikidata + AI draft → saved as a draft. */
-async function addOne(title: string, author: string, rec: Rec): Promise<{ id: number; existed: boolean }> {
-  const r = await api<{ draft?: Draft; duplicate?: { id: number } }>('/books/fill', { method: 'POST', json: { title, author, note: rec.note } })
+async function addOne(title: string, author: string, rec: Rec): Promise<{ id: number; existed: boolean; notes: string[] }> {
+  const r = await api<{ draft?: Draft; duplicate?: { id: number }; notes?: string[] }>('/books/fill', { method: 'POST', json: { title, author, note: rec.note } })
   if (r.duplicate) {
     if (rec.handle || rec.url) await api(`/books/${r.duplicate.id}/recs`, { method: 'POST', json: rec })
-    return { id: r.duplicate.id, existed: true }
+    return { id: r.duplicate.id, existed: true, notes: [] }
   }
   const s = await api<{ id: number }>('/books', { method: 'POST', json: { book: { ...r.draft, ai_pending: ['details'] }, recs: rec.handle || rec.url ? [rec] : [] } })
-  return { id: s.id, existed: false }
+  return { id: s.id, existed: false, notes: r.notes ?? [] }
 }
 
 export function BooksList({ me }: { me: Me }) {
@@ -38,7 +38,7 @@ export function BooksList({ me }: { me: Me }) {
     setBusy('Looking it up and drafting with AI… (up to a minute)'); setMsg('')
     try {
       const r = await addOne(form.title.trim(), form.author.trim(), { handle: form.handle, url: form.url, note: form.note })
-      if (r.existed) { setMsg(form.handle || form.url ? 'Already in Book Picks — this reviewer was added to it.' : 'Already in Book Picks.'); load() } else nav(`/admin/books/${r.id}`)
+      if (r.existed) { setMsg(form.handle || form.url ? 'Already in Book Picks — this reviewer was added to it.' : 'Already in Book Picks.'); load() } else nav(`/admin/books/${r.id}`, { state: { notes: r.notes } })
       setForm({ title: '', author: '', handle: '', url: '', note: '' })
     } catch (e) { setMsg((e as Error).message) }
     setBusy('')
@@ -126,6 +126,7 @@ export function BooksList({ me }: { me: Me }) {
 
 export function BookForm({ me }: { me: Me }) {
   const { id } = useParams()
+  const importNotes = ((useLocation().state as { notes?: string[] } | null)?.notes) ?? []
   const nav = useNavigate()
   const [m, setM] = useState<Draft | null>(null)
   const [recs, setRecs] = useState<Rec[]>([])
@@ -161,6 +162,12 @@ export function BookForm({ me }: { me: Me }) {
         <h1 className="m-0 font-display text-2xl font-bold flex-1">{m.title || 'Book'}</h1>
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${ST[m.status ?? 'draft'][1]}`}>{ST[m.status ?? 'draft'][0]}</span>
       </div>
+      {importNotes.length > 0 && (
+        <div role="status" className={`p-3 rounded-xl text-sm ${importNotes.some((n) => /failed|could not|rate limit|busy|rejected|no credit/i.test(n)) ? 'bg-red-50 text-red-900 border border-red-200' : 'bg-stone-100'}`}>
+          <b>What happened when this was added:</b>
+          <ul className="m-0 mt-1 pl-5">{importNotes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+        </div>
+      )}
       {pending && (
         <div className="p-3 rounded-lg bg-amber-50 text-amber-900 text-sm flex flex-wrap items-center gap-3">
           <span className="flex-1">AI draft — check the details below{m.wikidata_id ? <> against <a href={`https://www.wikidata.org/wiki/${m.wikidata_id}`} target="_blank" rel="noreferrer">Wikidata ↗</a></> : ''}, then confirm.</span>

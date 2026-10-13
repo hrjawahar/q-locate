@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, Me } from './api'
 
 import { MOVIE_GENRES as GENRES, MOODS } from '../../worker/moods'
@@ -41,7 +41,7 @@ export function MoviesList({ me }: { me: Me }) {
     try {
       const r = await addOne(form.title.trim(), form.year, { handle: form.handle, url: form.url, note: form.note })
       if (r.existed) { setMsg(form.handle || form.url ? 'Already in Movie Picks — this reviewer was added to it.' : 'Already in Movie Picks.'); load() }
-      else nav(`/admin/movies/${r.id}`)
+      else nav(`/admin/movies/${r.id}`, { state: { notes: r.notes } })
       setForm({ title: '', year: '', handle: '', url: '', note: '' })
     } catch (e) { setMsg((e as Error).message) }
     setBusy('')
@@ -130,6 +130,7 @@ export function MoviesList({ me }: { me: Me }) {
 
 export function MovieForm({ me }: { me: Me }) {
   const { id } = useParams()
+  const importNotes = ((useLocation().state as { notes?: string[] } | null)?.notes) ?? []
   const nav = useNavigate()
   const [m, setM] = useState<(Draft & { status?: string; slug?: string }) | null>(null)
   const [recs, setRecs] = useState<Rec[]>([])
@@ -167,6 +168,12 @@ export function MovieForm({ me }: { me: Me }) {
         <h1 className="m-0 font-display text-2xl font-bold flex-1">{m.title || 'Movie'}</h1>
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${ST[m.status ?? 'draft'][1]}`}>{ST[m.status ?? 'draft'][0]}</span>
       </div>
+      {importNotes.length > 0 && (
+        <div role="status" className={`p-3 rounded-xl text-sm ${importNotes.some((n) => /failed|could not|rate limit|busy|rejected|no credit/i.test(n)) ? 'bg-red-50 text-red-900 border border-red-200' : 'bg-stone-100'}`}>
+          <b>What happened when this was added:</b>
+          <ul className="m-0 mt-1 pl-5">{importNotes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+        </div>
+      )}
       {pending && (
         <div className="p-3 rounded-lg bg-amber-50 text-amber-900 text-sm flex flex-wrap items-center gap-3">
           <span className="flex-1">AI draft — check the details below against the reel{m.wikidata_id ? <> and <a href={`https://www.wikidata.org/wiki/${m.wikidata_id}`} target="_blank" rel="noreferrer">Wikidata ↗</a></> : ''}, then confirm.</span>

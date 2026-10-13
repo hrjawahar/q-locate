@@ -4,6 +4,7 @@ import { json, parseJson } from '../util'
 import { type AdminEnv, type Admin, canPublish } from './auth'
 import { MOOD_PROMPT, SETTING_PROMPT, moodKeys } from '../moods'
 import { lastJson } from './jsonpick'
+import { aiFetch, aiError } from './anthropic'
 
 type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string }
 
@@ -16,16 +17,12 @@ export async function suggestMoods(kind: 'book' | 'movie', id: number, env: Env,
   const about = kind === 'book'
     ? `Book: ${r.title}${r.author ? ` by ${r.author}` : ''}${r.year ? ` (${r.year})` : ''}. ${r.fiction === 1 ? 'Fiction' : r.fiction === 0 ? 'Non-fiction' : ''}. Categories: ${parseJson<string[]>(r.genres, []).join(', ')}. ${r.topic ? `Topic: ${r.topic}. ` : ''}Pitch: ${r.pitch ?? ''}`
     : `Film: ${r.title}${r.year ? ` (${r.year})` : ''}. Categories: ${parseJson<string[]>(r.genres, []).join(', ')}. ${r.doc_topic ? `About: ${r.doc_topic}. ` : ''}Pitch: ${r.pitch ?? ''}`
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST', signal: AbortSignal.timeout(60_000),
-    headers: { 'x-api-key': env.ANTHROPIC_API_KEY.trim().replace(/^["']|["']$/g, ''), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({
+  const res = await aiFetch(env.ANTHROPIC_API_KEY, {
       model: env.AI_MODEL || 'claude-sonnet-5-5', max_tokens: 900, temperature: 0,
       system: 'You tag books and films for a gentle "read/watch for your mood" feature. Use what you reliably know about the title and the details given. Never recommend something for a mood it could make worse (e.g. a bleak tragedy for someone grieving). If unsure, give fewer moods. Reply with one JSON object only.',
       messages: [{ role: 'user', content: `${about}\nReturn JSON: {${MOOD_PROMPT},\n ${SETTING_PROMPT}}` }],
-    }),
-  })
-  if (!res.ok) return json({ error: `AI answered ${res.status}` }, { status: 502 })
+    }, 60_000)
+  if (!res.ok) return json({ error: await aiError(res) }, { status: 502 })
   const text = ((await res.json()) as { content?: { type: string; text?: string }[] }).content?.find((c) => c.type === 'text')?.text ?? ''
   const raw = lastJson(text, ['moods', 'mood_note']) ?? {}
   const moods = moodKeys(raw.moods)

@@ -5,6 +5,7 @@
 import { validScriptNames } from './scripts'
 import { sourceHints, BLOCKED } from './trusted'
 import { lastJson } from './jsonpick'
+import { aiFetch, aiError } from './anthropic'
 export interface AiFacts {
   name: string
   kind: 'vacation' | 'spiritual'
@@ -68,18 +69,13 @@ const schema = (kind: 'vacation' | 'spiritual') => `Return JSON with exactly the
 type Block = { type: string; text?: string; content?: { type: string; url?: string; title?: string }[] | unknown; citations?: { url?: string; title?: string }[] }
 
 async function call(apiKey: string, model: string, facts: AiFacts, web: boolean, block = true) {
-  return fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    signal: AbortSignal.timeout(170_000),
-    headers: { 'x-api-key': apiKey.trim().replace(/^["']|["']$/g, ''), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({
+  return aiFetch(apiKey, {
       model,
       max_tokens: 6000,
       system: SYSTEM,
       ...(web ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8, ...(block ? { blocked_domains: BLOCKED } : {}) }] } : { temperature: 0 }),
       messages: [{ role: 'user', content: `${schema(facts.kind)}${facts.names_needed?.length ? `\nAlso add the key "local_names": {${facts.names_needed.map((k) => `"${k}": ""`).join(', ')}} — the place's name as written in ${facts.names_needed.map((k) => ({ ta: 'Tamil', te: 'Telugu', kn: 'Kannada', ml: 'Malayalam', hi: 'Hindi' } as Record<string, string>)[k]).join(', ')} script (as used on signboards or official sites; a careful transliteration of the proper name if none is published).` : ''}${facts.categories_allowed?.length ? `\nAlso add the key "categories": [every slug that fits, from: ${facts.categories_allowed.map((c) => `"${c.slug}" (${c.name})`).join(', ')}] — e.g. a temple on a hill or reached by steps is also "hill-temple".` : ''}\n\n${web ? `${sourceHints(facts.state, facts.district, facts.country)}\n\n` : ''}Place: ${facts.name} (${facts.location})\n\nFacts:\n${JSON.stringify(facts)}` }],
-    }),
-  })
+    }, 170_000)
 }
 
 export async function draftWithAi(apiKey: string, model: string, facts: AiFacts, notes: string[] = [], web = true): Promise<AiDraft | null> {
@@ -90,13 +86,7 @@ export async function draftWithAi(apiKey: string, model: string, facts: AiFacts,
     if (/blocked_domains|domain/i.test(t)) { res = await call(apiKey, model, facts, true, false); if (res.ok) notes.push('AI searched without the skip-list (refused by the AI service)') }
     if (!res.ok && res.status === 400 && /web.?search|tool/i.test(await res.clone().text())) { notes.push('AI web search unavailable on this API key; drafted from open sources only'); res = await call(apiKey, model, facts, false) }
   }
-  if (!res.ok) {
-    const t = await res.text()
-    if (res.status === 401) throw new Error('AI key rejected (401) — replace the ANTHROPIC_API_KEY secret with a fresh key')
-    if (/credit balance/i.test(t)) throw new Error('AI account has no credit — add credit at console.anthropic.com')
-    if (res.status === 404 || /model/i.test(t)) throw new Error(`AI model "${model}" not available — check AI_MODEL`)
-    throw new Error(`AI answered ${res.status}: ${t.slice(0, 120)}`)
-  }
+  if (!res.ok) throw new Error(await aiError(res))
   const data = (await res.json()) as { content?: Block[]; stop_reason?: string }
   if (data.stop_reason === 'max_tokens') notes.push('AI reply was cut short')
   const blocks = data.content ?? []

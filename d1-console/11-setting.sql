@@ -1,0 +1,2 @@
+ALTER TABLE books ADD COLUMN setting TEXT;
+ALTER TABLE movies ADD COLUMN setting TEXT;

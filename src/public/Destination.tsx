@@ -2,8 +2,8 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Footer } from './Layout'
 import {
-  loadIndex, loadFestivals, loadMakers, regionOf, regionSlug, placeUrl, phoneDigits, festivalDates, festivalMonths, festivalInMonth, festivalOrder,
-  type IndexPlace, type Festival, type Maker,
+  loadIndex, loadFestivals, loadMakers, loadBooks, loadMovies, regionOf, regionSlug, placeUrl, phoneDigits, festivalDates, festivalMonths, festivalInMonth, festivalOrder,
+  type IndexPlace, type Festival, type Maker, type Book, type Movie,
 } from './data'
 const PinMap = lazy(() => import('./PinMap'))
 
@@ -13,7 +13,9 @@ export default function Destination() {
   const [all, setAll] = useState<IndexPlace[] | null>(null)
   const [fests, setFests] = useState<Festival[]>([])
   const [makers, setMakers] = useState<Maker[]>([])
-  useEffect(() => { loadIndex().then(setAll); loadFestivals().then(setFests); loadMakers().then(setMakers) }, [])
+  const [books, setBooks] = useState<Book[]>([])
+  const [movies, setMovies] = useState<Movie[]>([])
+  useEffect(() => { loadIndex().then(setAll); loadFestivals().then(setFests); loadMakers().then(setMakers); loadBooks().then(setBooks); loadMovies().then(setMovies) }, [])
 
   const places = useMemo(() => (all ?? []).filter((p) => regionSlug(regionOf(p)) === region), [all, region])
   const name = places[0] ? regionOf(places[0]) : region.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -23,6 +25,13 @@ export default function Destination() {
   const soon = (f: Festival) => [0, 1, 2, 3].some((i) => festivalInMonth(f, ((m - 1 + i) % 12) + 1))
   const fs = fests.filter((f) => regionSlug(regionOf({ country: f.country ?? '', state: f.state ?? '' })) === region && soon(f)).sort((a, b) => festivalOrder(a) - festivalOrder(b))
   const mk = makers.filter((x) => regionSlug(regionOf({ country: x.country ?? '', state: x.state ?? '' })) === region)
+  // Books and films set here: the setting names the state/country (or a distinctive word of it, e.g. "Kashmir") or a town we list.
+  const setHere = useMemo(() => {
+    const words = new Set([name.toLowerCase(), ...name.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 5 && !['pradesh', 'islands', 'territory', 'union'].includes(w)),
+      ...places.flatMap((p) => [p.city, p.district_city]).filter(Boolean).map((x) => x.toLowerCase())])
+    const hit = (s: string | null) => !!s && s.toLowerCase().split(/[;,]/).map((x) => x.trim()).some((part) => [...words].some((w) => part === w || part.split(/\s+/).includes(w) || part.includes(w) && w.includes(' ')))
+    return { books: books.filter((b) => hit(b.setting)).slice(0, 6), movies: movies.filter((x) => hit(x.setting)).slice(0, 6) }
+  }, [name, places, books, movies])
   const pins = useMemo(() => places.filter((p) => p.lat != null && p.lng != null).map((p) => ({ lat: p.lat!, lng: p.lng!, name: p.name, to: placeUrl(p), dark: p.kind === 'spiritual' })), [places])
 
   useEffect(() => { document.title = `${name} — Q-Locate`; return () => { document.title = 'Q-Locate — Quick location guide' } }, [name])
@@ -77,6 +86,27 @@ export default function Destination() {
             ))}
           </ul>
           <p className="m-0 mt-2 text-xs text-muted">Festival dates can shift — please confirm locally before you travel.</p>
+        </section>
+      )}
+
+      {(setHere.books.length > 0 || setHere.movies.length > 0) && (
+        <section className="px-5"><H>Read & watch before you go</H>
+          <ul className="list-none m-0 p-0 flex flex-col gap-2">
+            {setHere.books.map((b) => (
+              <li key={`b${b.slug}`}><Link to={`/books?q=${encodeURIComponent(b.title)}`} className="flex items-center gap-3 p-3 rounded-2xl bg-white no-underline text-ink">
+                <span aria-hidden="true" className="text-2xl">📖</span>
+                <span className="flex-1 min-w-0"><b className="font-serif">{b.title}</b>{b.author && <span className="text-sm text-muted"> · {b.author}</span>}
+                  <span className="block text-xs text-muted truncate">Set in {b.setting}</span></span>
+              </Link></li>
+            ))}
+            {setHere.movies.map((x) => (
+              <li key={`m${x.slug}`}><Link to={`/movies?q=${encodeURIComponent(x.title)}`} className="flex items-center gap-3 p-3 rounded-2xl bg-white no-underline text-ink">
+                <span aria-hidden="true" className="text-2xl">🎬</span>
+                <span className="flex-1 min-w-0"><b>{x.title}</b>{x.year && <span className="text-sm text-muted"> · {x.year}</span>}
+                  <span className="block text-xs text-muted truncate">Set in {x.setting}</span></span>
+              </Link></li>
+            ))}
+          </ul>
         </section>
       )}
 

@@ -17,6 +17,7 @@ export async function booksJson(env: Env) {
       slug: x.slug, title: x.title, author: x.author, year: x.year, language: x.language, topic: x.topic, pages: x.pages, pitch: x.pitch, published_at: x.published_at,
       genres: parseJson<string[]>(x.genres, []), fiction: x.fiction == null ? null : !!x.fiction, recs: recs.get(x.id as number) ?? [],
       moods: moodsOk ? parseJson<string[]>(x.moods, []) : [], mood_note: moodsOk ? (x.mood_note ?? null) : null,
+      setting: x.setting ?? null,
     }
   })
   return json({ books }, { headers: { 'cache-control': 'public, max-age=300' } })

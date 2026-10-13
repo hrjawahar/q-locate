@@ -18,6 +18,7 @@ export async function moviesJson(env: Env) {
       runtime_min: x.runtime_min, pitch: x.pitch, published_at: x.published_at,
       genres: parseJson<string[]>(x.genres, []), family_friendly: x.family_friendly == null ? null : !!x.family_friendly, recs: recs.get(x.id as number) ?? [],
       moods: moodsOk ? parseJson<string[]>(x.moods, []) : [], mood_note: moodsOk ? (x.mood_note ?? null) : null,
+      setting: x.setting ?? null,
     }
   })
   return json({ movies }, { headers: { 'cache-control': 'public, max-age=300' } })

@@ -11,7 +11,7 @@ const ST: Record<string, [string, string]> = { draft: ['Draft', 'bg-stone-100'],
 const hm = (m: number | null) => (m ? `${Math.floor(m / 60)}h ${m % 60}m` : '—')
 
 interface Rec { handle: string; url: string; note: string }
-interface Draft { title: string; year: number | null; country: string | null; language: string | null; subtitles: string | null; genres: string[]; doc_topic: string | null; runtime_min: number | null; pitch: string | null; family_friendly: boolean | null; wikidata_id: string | null; ai_pending?: string[]; moods?: string[]; mood_note?: string | null }
+interface Draft { title: string; year: number | null; country: string | null; language: string | null; subtitles: string | null; genres: string[]; doc_topic: string | null; runtime_min: number | null; pitch: string | null; family_friendly: boolean | null; wikidata_id: string | null; ai_pending?: string[]; moods?: string[]; mood_note?: string | null; setting?: string | null }
 interface Row { id: number; title: string; year: number | null; country: string | null; genres: string; runtime_min: number | null; status: string; ai_pending: string | null; recs: number; moods?: string | null }
 
 /** Add one movie from a reel: title + reviewer → Wikidata + AI draft → saved as a draft. Returns the new or existing id. */
@@ -181,6 +181,7 @@ export function MovieForm({ me }: { me: Me }) {
         {field('Subtitles', <input className={inp} placeholder="e.g. English subtitles" value={m.subtitles ?? ''} onChange={(e) => set('subtitles', e.target.value)} />, 'sm:col-span-2')}
         {field('Length (minutes) *', <input className={inp} inputMode="numeric" value={m.runtime_min ?? ''} onChange={(e) => set('runtime_min', e.target.value)} />, 'sm:col-span-2')}
         {field('Documentary topic', <input className={inp} placeholder="e.g. Aviation, Wildlife" value={m.doc_topic ?? ''} onChange={(e) => set('doc_topic', e.target.value)} />, 'sm:col-span-2')}
+        {field('Set in (real place)', <input className={inp} placeholder="e.g. Munnar, Kerala; Japan" value={m.setting ?? ''} onChange={(e) => set('setting', e.target.value)} />, 'sm:col-span-2')}
         {field('Family friendly', <select className={inp} value={m.family_friendly == null ? '' : m.family_friendly ? 'yes' : 'no'} onChange={(e) => set('family_friendly', e.target.value === '' ? null : e.target.value === 'yes')}><option value="">Not sure</option><option value="yes">Yes</option><option value="no">No (adult themes)</option></select>, 'sm:col-span-2')}
       </div>
       <fieldset className="m-0 p-0 border-0">

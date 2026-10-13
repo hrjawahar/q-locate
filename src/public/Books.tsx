@@ -24,7 +24,7 @@ export default function Books() {
   useEffect(() => { loadBooks().then(setAll); document.title = 'Book Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const ms = useMemo(() => {
-    const s = new MiniSearch<Book & { genresText: string; who: string; moodText: string }>({ idField: 'slug', fields: ['title', 'author', 'genresText', 'topic', 'pitch', 'language', 'who', 'moodText'], storeFields: ['slug'], processTerm,
+    const s = new MiniSearch<Book & { genresText: string; who: string; moodText: string }>({ idField: 'slug', fields: ['title', 'author', 'genresText', 'topic', 'pitch', 'language', 'who', 'moodText', 'setting'], storeFields: ['slug'], processTerm,
       searchOptions: { prefix: true, fuzzy: 0.15, boost: { title: 4, author: 3, genresText: 2, topic: 2 } } })
     s.addAll((all ?? []).map((b) => ({ ...b, genresText: b.genres.join(' '), who: b.recs.map((r) => r.handle ?? '').join(' '), moodText: [...(b.moods ?? []).map((k) => MOODS[k]), b.mood_note ?? ''].join(' ') })))
     return s
@@ -123,6 +123,7 @@ export default function Books() {
               {b.topic && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-forest/10 text-forest">{b.topic}</span>}
             </div>
             {b.pitch && <p className="m-0 text-[16px] leading-relaxed">{b.pitch}</p>}
+            {b.setting && <p className="m-0 text-sm text-muted">📍 Set in {b.setting.split(';').map((x) => x.trim()).filter(Boolean).join(' · ')}</p>}
             {moodActive && b.mood_note && <p className="m-0 text-sm p-3 rounded-xl bg-[#EEF3EC]"><b>Why it may help:</b> {b.mood_note}</p>}
             {b.recs.length > 0 && (
               <div className="text-sm flex flex-wrap items-center gap-x-3 gap-y-1">

@@ -25,7 +25,7 @@ export default function Movies() {
   useEffect(() => { loadMovies().then(setAll); document.title = 'Movie Picks — Q-Locate'; return () => { document.title = 'Q-Locate — Quick location guide' } }, [])
 
   const ms = useMemo(() => {
-    const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch', 'who', 'moodText'], storeFields: ['slug'], processTerm,
+    const s = new MiniSearch<Movie>({ idField: 'slug', fields: ['title', 'country', 'language', 'genresText', 'doc_topic', 'pitch', 'who', 'moodText', 'setting'], storeFields: ['slug'], processTerm,
       searchOptions: { prefix: true, fuzzy: 0.2, boost: { title: 4, genresText: 2, doc_topic: 2, country: 2 } } })
     s.addAll((all ?? []).map((m) => ({ ...m, genresText: m.genres.join(' '), who: m.recs.map((r) => r.handle ?? '').join(' '), moodText: [...(m.moods ?? []).map((k) => MOODS[k]), m.mood_note ?? ''].join(' ') })))
     return s
@@ -132,6 +132,7 @@ export default function Movies() {
               {m.family_friendly && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-900">Family friendly</span>}
             </div>
             {m.pitch && <p className="m-0 text-[16px] leading-relaxed">{m.pitch}</p>}
+            {m.setting && <p className="m-0 text-sm text-muted">📍 Set in {m.setting.split(';').map((x) => x.trim()).filter(Boolean).join(' · ')}</p>}
             {moodActive && m.mood_note && <p className="m-0 text-sm p-3 rounded-xl bg-[#EEF3EC]"><b>Why it may help:</b> {m.mood_note}</p>}
             {m.recs.length > 0 && (
               <div className="text-sm flex flex-wrap items-center gap-x-3 gap-y-1">

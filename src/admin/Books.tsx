@@ -9,7 +9,7 @@ const hot = 'h-11 px-4 rounded-lg font-semibold bg-forest text-white disabled:op
 const ST: Record<string, [string, string]> = { draft: ['Draft', 'bg-stone-100'], published: ['Published', 'bg-green-100 text-green-900'], archived: ['Archived', 'bg-stone-200 text-stone-500'] }
 
 interface Rec { handle: string; url: string; note: string }
-interface Draft { title: string; author: string | null; year: number | null; language: string | null; fiction: boolean | null; genres: string[]; topic: string | null; pages: number | null; pitch: string | null; wikidata_id: string | null; ai_pending?: string[]; status?: string; moods?: string[]; mood_note?: string | null }
+interface Draft { title: string; author: string | null; year: number | null; language: string | null; fiction: boolean | null; genres: string[]; topic: string | null; pages: number | null; pitch: string | null; wikidata_id: string | null; ai_pending?: string[]; status?: string; moods?: string[]; mood_note?: string | null; setting?: string | null }
 interface Row { id: number; title: string; author: string | null; year: number | null; genres: string; pages: number | null; status: string; ai_pending: string | null; recs: number; moods?: string | null }
 
 /** Add one book from a reel: title (+ author) + reviewer → Wikidata + AI draft → saved as a draft. */
@@ -175,6 +175,7 @@ export function BookForm({ me }: { me: Me }) {
         {field('Fiction or non-fiction', <select className={inp} value={m.fiction == null ? '' : m.fiction ? 'f' : 'n'} onChange={(e) => set('fiction', e.target.value === '' ? null : e.target.value === 'f')}><option value="">Choose…</option><option value="f">Fiction</option><option value="n">Non-fiction</option></select>, 'sm:col-span-2')}
         {field('Pages (approx.)', <input className={inp} inputMode="numeric" value={m.pages ?? ''} onChange={(e) => set('pages', e.target.value)} />, 'sm:col-span-2')}
         {field('Topic (non-fiction)', <input className={inp} placeholder="e.g. Habits, Investing" value={m.topic ?? ''} onChange={(e) => set('topic', e.target.value)} />, 'sm:col-span-2')}
+        {field('Set in (real place)', <input className={inp} placeholder="e.g. Munnar, Kerala; Japan" value={m.setting ?? ''} onChange={(e) => set('setting', e.target.value)} />, 'sm:col-span-2')}
       </div>
       <fieldset className="m-0 p-0 border-0">
         <legend className="text-sm font-semibold mb-2">Category * (pick 1–3)</legend>

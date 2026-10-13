@@ -2,7 +2,8 @@
 // from what we already know about the title. Saved for the editor to check (hidden from users until then).
 import { json, parseJson } from '../util'
 import { type AdminEnv, type Admin, canPublish } from './auth'
-import { MOOD_PROMPT, moodKeys } from '../moods'
+import { MOOD_PROMPT, SETTING_PROMPT, moodKeys } from '../moods'
+import { lastJson } from './jsonpick'
 
 type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string }
 
@@ -19,22 +20,23 @@ export async function suggestMoods(kind: 'book' | 'movie', id: number, env: Env,
     method: 'POST', signal: AbortSignal.timeout(60_000),
     headers: { 'x-api-key': env.ANTHROPIC_API_KEY.trim().replace(/^["']|["']$/g, ''), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: env.AI_MODEL || 'claude-sonnet-5-5', max_tokens: 400, temperature: 0,
+      model: env.AI_MODEL || 'claude-sonnet-5-5', max_tokens: 900, temperature: 0,
       system: 'You tag books and films for a gentle "read/watch for your mood" feature. Use what you reliably know about the title and the details given. Never recommend something for a mood it could make worse (e.g. a bleak tragedy for someone grieving). If unsure, give fewer moods. Reply with one JSON object only.',
-      messages: [{ role: 'user', content: `${about}\nReturn JSON: {${MOOD_PROMPT}}` }],
+      messages: [{ role: 'user', content: `${about}\nReturn JSON: {${MOOD_PROMPT},\n ${SETTING_PROMPT}}` }],
     }),
   })
   if (!res.ok) return json({ error: `AI answered ${res.status}` }, { status: 502 })
   const text = ((await res.json()) as { content?: { type: string; text?: string }[] }).content?.find((c) => c.type === 'text')?.text ?? ''
-  let raw: Record<string, unknown> = {}
-  try { raw = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] ?? '{}') } catch { /* ignore */ }
+  const raw = lastJson(text, ['moods', 'mood_note']) ?? {}
   const moods = moodKeys(raw.moods)
   const note = typeof raw.mood_note === 'string' ? raw.mood_note.trim().slice(0, 200) : null
   if (!moods.length) return json({ ok: false, note: 'No clear moods for this one' })
+  // Where it's set (for destination pages): only filled when still empty.
+  const setting = !r.setting && typeof raw.setting === 'string' && raw.setting.trim() ? raw.setting.trim().slice(0, 160) : null
   const pending = new Set(parseJson<string[]>(r.ai_pending, [])); pending.add('moods')
   await env.DB.batch([
-    env.DB.prepare(`UPDATE ${table} SET moods = ?, mood_note = ?, ai_pending = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
-      .bind(JSON.stringify(moods), note, JSON.stringify([...pending]), a.email, id),
+    env.DB.prepare(`UPDATE ${table} SET moods = ?, mood_note = ?, setting = COALESCE(?, setting), ai_pending = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+      .bind(JSON.stringify(moods), note, setting, JSON.stringify([...pending]), a.email, id),
     env.DB.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'suggest_moods', ?, ?)`).bind(a.email, kind, String(id)),
   ])
   return json({ ok: true, moods, mood_note: note })

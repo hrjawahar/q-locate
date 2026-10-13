@@ -1,16 +1,17 @@
 // Book Picks: a small, reviewed reading list. Facts from Wikidata (CC0) when it knows the book,
 // the rest drafted by AI (with web research) and checked by an admin before publishing.
 import { json, parseJson } from '../util'
+import { lastJson } from './jsonpick'
 import { type AdminEnv, type Admin, canPublish } from './auth'
 import { sparql, wdSearch, type WdHit } from './sources'
-import { MOODS, MOOD_PROMPT, moodKeys, BOOK_FICTION, BOOK_NONFICTION } from '../moods'
+import { MOODS, MOOD_PROMPT, moodKeys, BOOK_FICTION, BOOK_NONFICTION, SETTING_PROMPT } from '../moods'
 
 type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; AI_WEB_SEARCH?: string }
 
 export const FICTION = BOOK_FICTION
 export const NONFICTION = BOOK_NONFICTION
 const GENRES = [...FICTION, ...NONFICTION]
-const FIELDS = ['title', 'author', 'year', 'language', 'fiction', 'genres', 'topic', 'pages', 'pitch', 'moods', 'mood_note', 'wikidata_id', 'ai_pending'] as const
+const FIELDS = ['title', 'author', 'year', 'language', 'fiction', 'genres', 'topic', 'pages', 'pitch', 'moods', 'mood_note', 'setting', 'wikidata_id', 'ai_pending'] as const
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').slice(0, 70)
 const bump = (env: AdminEnv) => env.DB.prepare("INSERT INTO meta (key, value) VALUES ('books_version', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1")
@@ -50,7 +51,7 @@ export async function save(id: number | null, body: Record<string, unknown>, env
     fiction: m.fiction === true || m.fiction === 1 ? 1 : m.fiction === false || m.fiction === 0 ? 0 : null,
     genres: JSON.stringify(Array.isArray(m.genres) ? m.genres.filter((g) => GENRES.includes(String(g))).slice(0, 4) : []),
     topic: clean(m.topic, 80), pages: num(m.pages), pitch: clean(m.pitch, 300),
-    moods: JSON.stringify(moodKeys(m.moods)), mood_note: clean(m.mood_note, 200),
+    moods: JSON.stringify(moodKeys(m.moods)), mood_note: clean(m.mood_note, 200), setting: clean(m.setting, 160),
     wikidata_id: typeof m.wikidata_id === 'string' && /^Q\d+$/.test(m.wikidata_id) ? m.wikidata_id : null,
     ai_pending: JSON.stringify(Array.isArray(m.ai_pending) ? m.ai_pending : []),
   }
@@ -147,7 +148,8 @@ const SCHEMA = `Return JSON:
  "language": "\\"English\\" if written in English, else \\"English (translated from X)\\"", "fiction": true | false,
  "genres": ["1-4 that fit, most specific first, from: ${GENRES.join(', ')}"], "topic": "for non-fiction only: the subject in 1-3 words, e.g. Habits, Investing, Mughal history; else \\"\\"",
  "pages": 0 (typical English edition, approximate), "pitch": "",
- ${MOOD_PROMPT}}`
+ ${MOOD_PROMPT},
+ ${SETTING_PROMPT}}`
 
 export async function fill(body: Record<string, unknown>, env: Env) {
   const title = clean(body.title, 160)
@@ -176,7 +178,7 @@ export async function fill(body: Record<string, unknown>, env: Env) {
     method: 'POST', signal: AbortSignal.timeout(90_000),
     headers: { 'x-api-key': env.ANTHROPIC_API_KEY!.trim().replace(/^["']|["']$/g, ''), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: env.AI_MODEL || 'claude-sonnet-5-5', max_tokens: 1200, system: SYSTEM,
+      model: env.AI_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM,
       ...(web ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] } : { temperature: 0 }),
       messages: [{ role: 'user', content: `${SCHEMA}\n\nBook: ${title}${author ? ` by ${author}` : ''}\nFacts: ${JSON.stringify({ wikidata: wd, reviewer_note: clean(body.note, 300) })}` }],
     }),
@@ -189,7 +191,8 @@ export async function fill(body: Record<string, unknown>, env: Env) {
     const blocks = ((await res.json()) as { content?: { type: string; text?: string }[] }).content ?? []
     const last = blocks.map((b) => b.type).lastIndexOf('web_search_tool_result')
     const text = blocks.slice(last + 1).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('')
-    const raw = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] ?? '{}') as Record<string, unknown>
+    const raw = lastJson(blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''), ['pitch', 'genres', 'moods'])
+    if (!raw) throw new Error('AI reply could not be read — try again')
     const s = (k: string, max: number) => clean(typeof raw[k] === 'string' ? (raw[k] as string).replace(/<\/?cite[^>]*>/g, '') : null, max)
     const fiction = typeof raw.fiction === 'boolean' ? raw.fiction : null
     const draft = {
@@ -203,7 +206,7 @@ export async function fill(body: Record<string, unknown>, env: Env) {
       topic: fiction ? null : s('topic', 80),
       pages: base.pages ?? (num(raw.pages) || null),
       pitch: s('pitch', 220),
-      moods: moodKeys(raw.moods), mood_note: s('mood_note', 200),
+      moods: moodKeys(raw.moods), mood_note: s('mood_note', 200), setting: s('setting', 160),
     }
     return json({ draft, notes: [...notes, 'AI drafted category, pitch, moods and details'] })
   } catch (e) {

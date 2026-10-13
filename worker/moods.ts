@@ -11,14 +11,23 @@ export const MOODS_HARD: Record<string, string> = {
 export const MOODS_GOOD: Record<string, string> = {
   happy: 'Happy, want more of it', love: 'In love', calm: 'Calm and reflective', laugh: 'Want to laugh', escape: 'Want an escape',
   adventurous: 'Adventurous', curious: 'Curious', inspired: 'Want to feel inspired', motivation: 'Need motivation',
-  fresh_start: 'Fresh start', meaning: 'Seeking meaning', travel: 'Travelling', nostalgic: 'Nostalgic',
+  fresh_start: 'Fresh start', meaning: 'Seeking meaning', travel: 'Wanderlust', nostalgic: 'Nostalgic',
   courage: 'Want courage', moved: 'Want a good cry', thrill: 'Want a thrill', wonder: 'Want to feel wonder',
 }
-export const MOODS: Record<string, string> = { ...MOODS_HARD, ...MOODS_GOOD }
+/** Pick for a purpose. */
+export const MOODS_GOAL: Record<string, string> = {
+  trip: 'For a trip', english: 'Improve my English', communication: 'Speak and present better', language: 'Learn a language',
+  career: 'Grow at work', family: 'With family or kids', learn: 'Learn something new',
+}
+export const MOODS: Record<string, string> = { ...MOODS_HARD, ...MOODS_GOOD, ...MOODS_GOAL }
 
-export const moodKeys = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.map(String).filter((k) => k in MOODS))].slice(0, 4) : [])
-export const MOOD_PROMPT = `"moods": [2 to 4 keys from: ${Object.entries(MOODS).map(([k, l]) => `${k} (${l})`).join(', ')} — the moods this genuinely suits: for difficult moods (${Object.keys(MOODS_HARD).join(', ')}) only if it would comfort or help someone in that state; fresh_start = a new job, move or new year; meaning = spiritual or philosophical search; travel = set in a place worth visiting or about journeys; angry = helps channel or understand anger; fed_up = restores faith in people; afraid = steadying, gives courage (never horror); courage = heroism, standing up, grit; moved = compassion, tears that heal; thrill = suspense, horror or edge-of-the-seat, for people who enjoy fear (never for anxious or afraid); wonder = awe, the marvellous, epic scale],
+export const moodKeys = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.map(String).filter((k) => k in MOODS))].slice(0, 7) : [])
+export const MOOD_PROMPT = `"moods": [2 to 4 feeling keys plus 0 to 3 purpose keys, from feelings: ${Object.entries({ ...MOODS_HARD, ...MOODS_GOOD }).map(([k, l]) => `${k} (${l})`).join(', ')} — the moods this genuinely suits: for difficult moods (${Object.keys(MOODS_HARD).join(', ')}) only if it would comfort or help someone in that state; fresh_start = a new job, move or new year; meaning = spiritual or philosophical search; travel = wanderlust: set in a place worth visiting or about journeys; angry = helps channel or understand anger; fed_up = restores faith in people; afraid = steadying, gives courage (never horror); courage = heroism, standing up, grit; moved = compassion, tears that heal; thrill = suspense, horror or edge-of-the-seat, for people who enjoy fear (never for anxious or afraid); wonder = awe, the marvellous, epic scale.
+ Purposes: ${Object.entries(MOODS_GOAL).map(([k, l]) => `${k} (${l})`).join(', ')} — trip = a good companion on a holiday, flight or long train ride: absorbing, easy to pick up and put down, not too heavy; english = clear, natural English that helps a learner (simple prose, or clear dialogue with English subtitles); communication = great speeches, debate, negotiation, persuasion or presence worth learning from; language = helps learn a non-English language (bilingual text, or a film in that language with subtitles); career = useful at work; family = suitable to share with family or children; learn = teaches real knowledge],
  "mood_note": "one gentle line, at most 140 characters, on why it may suit someone in those moods; no promises, no clinical claims"`
+
+/** Where a book or film is mainly set, so destination pages can suggest it. */
+export const SETTING_PROMPT = `"setting": "where it is mainly set, if a real place: for India 'City or region, State' (e.g. 'Munnar, Kerala'), else 'Country' (e.g. 'Japan'); up to 3 places separated by ';'; \\"\\" if not set in a real place"`
 
 // Categories
 export const BOOK_FICTION = ['Literary fiction', 'Thriller', 'Mystery', 'Crime', 'Romance', 'Fantasy', 'Sci-fi', 'Historical fiction', 'Mythology', 'Political fiction',

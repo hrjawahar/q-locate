@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { MOODS, MOODS_HARD, MOODS_GOOD } from '../../worker/moods'
+import { MOODS, MOODS_HARD, MOODS_GOOD, MOODS_GOAL } from '../../worker/moods'
 export { MOODS }
 /** Moods where we add a gentle reminder that support is available. */
 const HEAVY = new Set(['low', 'grief', 'heartbroken', 'lonely'])
@@ -54,10 +54,10 @@ export default function MoodBar({ kind, mood, setMood, feel, setFeel }: { kind: 
   return (
     <section aria-label="Pick by how you feel" className="mx-5 p-4 rounded-2xl bg-[#EEF3EC] flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h2 className="m-0 font-display text-lg font-semibold">How are you feeling today?</h2>
+        <h2 className="m-0 font-display text-lg font-semibold">How are you feeling — or what do you need?</h2>
         <span className="text-sm text-muted"><Term kind={kind} /></span>
       </div>
-      {([['In the mood for…', MOODS_GOOD], ['Going through something', MOODS_HARD]] as const).map(([title, list]) => (
+      {([['In the mood for…', MOODS_GOOD], ['Pick for a purpose', MOODS_GOAL], ['Going through something', MOODS_HARD]] as const).map(([title, list]) => (
         <div key={title} className="flex flex-col gap-1.5">
           <span className="text-xs font-bold uppercase tracking-wider text-muted">{title}</span>
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" role="group" aria-label={title}>

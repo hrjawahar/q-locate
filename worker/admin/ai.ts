@@ -4,6 +4,7 @@
 
 import { validScriptNames } from './scripts'
 import { sourceHints, BLOCKED } from './trusted'
+import { lastJson } from './jsonpick'
 export interface AiFacts {
   name: string
   kind: 'vacation' | 'spiritual'
@@ -121,24 +122,9 @@ export async function draftWithAi(apiKey: string, model: string, facts: AiFacts,
 const ACCESS = ['drive_up', 'short_walk', 'steps_climb', 'trek']
 const VISIT = ['few_hours', '1_day', '2_3_days', 'week_plus']
 
-/** The last {...} in the text that parses as JSON and looks like our answer (has a summary or practical key). */
-function lastJson(text: string): Record<string, unknown> | null {
-  const t = text.replace(/```(?:json)?/g, '')
-  for (let end = t.lastIndexOf('}'); end > 0; end = t.lastIndexOf('}', end - 1)) {
-    let depth = 0
-    for (let i = end; i >= 0; i--) {
-      if (t[i] === '}') depth++
-      else if (t[i] === '{' && --depth === 0) {
-        try { const o = JSON.parse(t.slice(i, end + 1)); if (o && typeof o === 'object' && ('summary' in o || 'practical' in o || 'highlights' in o)) return o } catch { /* try an earlier start */ }
-      }
-    }
-  }
-  return null
-}
-
 /** Parse and sanity-check the model's JSON; drop anything that doesn't fit. */
 export function parseDraft(text: string, facts: AiFacts): AiDraft | null {
-  const raw = lastJson(text)
+  const raw = lastJson(text, ['summary', 'practical', 'highlights'])
   if (!raw) return null
   const str = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/<\/?cite[^>]*>/g, '').trim().slice(0, max) : '')
   const out: AiDraft = {}

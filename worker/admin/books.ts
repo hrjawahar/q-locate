@@ -11,7 +11,11 @@ type Env = AdminEnv & { ANTHROPIC_API_KEY?: string; AI_MODEL?: string; AI_WEB_SE
 export const FICTION = BOOK_FICTION
 export const NONFICTION = BOOK_NONFICTION
 const GENRES = [...FICTION, ...NONFICTION]
-const FIELDS = ['title', 'author', 'year', 'language', 'fiction', 'genres', 'topic', 'pages', 'pitch', 'moods', 'mood_note', 'setting', 'wikidata_id', 'ai_pending'] as const
+const ALL_FIELDS = ['title', 'author', 'year', 'language', 'fiction', 'genres', 'topic', 'pages', 'pitch', 'moods', 'mood_note', 'setting', 'wikidata_id', 'ai_pending'] as const
+type Field = typeof ALL_FIELDS[number]
+// 'setting' needs d1-console/11-setting.sql; until it's run, save without it.
+let FIELDS: readonly Field[] = ALL_FIELDS
+const noSetting = (e: unknown) => /no such column: setting|has no column named setting/i.test(String((e as Error)?.message ?? e))
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').slice(0, 70)
 const bump = (env: AdminEnv) => env.DB.prepare("INSERT INTO meta (key, value) VALUES ('books_version', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1")
@@ -60,14 +64,21 @@ export async function save(id: number | null, body: Record<string, unknown>, env
     if (clash) return json({ error: `Already in Book Picks (book #${clash}) — add the recommendation there`, existing: clash }, { status: 409 })
   }
   let bookId = id
-  if (!bookId) {
-    let slug = slugify(`${title} ${v.author ?? ''}`) || `book-${Date.now()}`
-    if (await env.DB.prepare('SELECT 1 FROM books WHERE slug = ?').bind(slug).first()) slug = `${slug}-${Date.now().toString(36)}`
-    bookId = (await env.DB.prepare(`INSERT INTO books (slug, ${FIELDS.join(', ')}, updated_by) VALUES (?, ${FIELDS.map(() => '?').join(', ')}, ?) RETURNING id`)
-      .bind(slug, ...FIELDS.map((f) => v[f]), a.email).first<number>('id'))!
-  } else {
-    await env.DB.prepare(`UPDATE books SET ${FIELDS.map((f) => `${f} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
-      .bind(...FIELDS.map((f) => v[f]), a.email, bookId).run()
+  const write = async () => {
+    if (!bookId) {
+      let slug = slugify(`${title} ${v.author ?? ''}`) || `book-${Date.now()}`
+      if (await env.DB.prepare('SELECT 1 FROM books WHERE slug = ?').bind(slug).first()) slug = `${slug}-${Date.now().toString(36)}`
+      bookId = (await env.DB.prepare(`INSERT INTO books (slug, ${FIELDS.join(', ')}, updated_by) VALUES (?, ${FIELDS.map(() => '?').join(', ')}, ?) RETURNING id`)
+        .bind(slug, ...FIELDS.map((f) => v[f]), a.email).first<number>('id'))!
+    } else {
+      await env.DB.prepare(`UPDATE books SET ${FIELDS.map((f) => `${f} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(...FIELDS.map((f) => v[f]), a.email, bookId).run()
+    }
+  }
+  try { await write() } catch (e) {
+    if (!noSetting(e)) throw e
+    FIELDS = ALL_FIELDS.filter((f) => f !== 'setting')
+    await write()
   }
   const recs = Array.isArray(body.recs) ? (body.recs as Record<string, unknown>[]) : []
   await env.DB.batch([
@@ -175,7 +186,7 @@ export async function fill(body: Record<string, unknown>, env: Env) {
   if (!env.ANTHROPIC_API_KEY) return json({ draft: base, notes: [...notes, 'AI is off (no ANTHROPIC_API_KEY)'] })
 
   const ask = (web: boolean) => fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST', signal: AbortSignal.timeout(90_000),
+    method: 'POST', signal: AbortSignal.timeout(web ? 120_000 : 60_000),
     headers: { 'x-api-key': env.ANTHROPIC_API_KEY!.trim().replace(/^["']|["']$/g, ''), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model: env.AI_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM,
@@ -183,15 +194,19 @@ export async function fill(body: Record<string, unknown>, env: Env) {
       messages: [{ role: 'user', content: `${SCHEMA}\n\nBook: ${title}${author ? ` by ${author}` : ''}\nFacts: ${JSON.stringify({ wikidata: wd, reviewer_note: clean(body.note, 300) })}` }],
     }),
   })
-  try {
-    const web = env.AI_WEB_SEARCH !== 'off'
+  // Read one reply; returns null if the model's answer can't be read.
+  const attempt = async (web: boolean) => {
     let res = await ask(web)
     if (!res.ok && web && res.status === 400) res = await ask(false)
     if (!res.ok) throw new Error(`AI answered ${res.status}`)
     const blocks = ((await res.json()) as { content?: { type: string; text?: string }[] }).content ?? []
-    const last = blocks.map((b) => b.type).lastIndexOf('web_search_tool_result')
-    const text = blocks.slice(last + 1).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('')
-    const raw = lastJson(blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''), ['pitch', 'genres', 'moods'])
+    return lastJson(blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''), ['pitch', 'genres', 'moods'])
+  }
+  try {
+    const web = env.AI_WEB_SEARCH !== 'off'
+    // Web research first; if it times out or the reply can't be read, ask again without searching (well-known titles don't need it).
+    let raw = await attempt(web).catch((e) => { if (!web) throw e; notes.push(`Web research skipped (${(e as Error).message.slice(0, 40)})`); return null })
+    if (!raw && web) raw = await attempt(false)
     if (!raw) throw new Error('AI reply could not be read — try again')
     const s = (k: string, max: number) => clean(typeof raw[k] === 'string' ? (raw[k] as string).replace(/<\/?cite[^>]*>/g, '') : null, max)
     const fiction = typeof raw.fiction === 'boolean' ? raw.fiction : null

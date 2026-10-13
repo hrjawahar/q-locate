@@ -34,9 +34,10 @@ export async function suggestMoods(kind: 'book' | 'movie', id: number, env: Env,
   // Where it's set (for destination pages): only filled when still empty.
   const setting = !r.setting && typeof raw.setting === 'string' && raw.setting.trim() ? raw.setting.trim().slice(0, 160) : null
   const pending = new Set(parseJson<string[]>(r.ai_pending, [])); pending.add('moods')
+  const hasSetting = 'setting' in r // column exists once d1-console/11-setting.sql has been run
   await env.DB.batch([
-    env.DB.prepare(`UPDATE ${table} SET moods = ?, mood_note = ?, setting = COALESCE(?, setting), ai_pending = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
-      .bind(JSON.stringify(moods), note, setting, JSON.stringify([...pending]), a.email, id),
+    env.DB.prepare(`UPDATE ${table} SET moods = ?, mood_note = ?, ${hasSetting ? 'setting = COALESCE(?, setting), ' : ''}ai_pending = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`)
+      .bind(...[JSON.stringify(moods), note, ...(hasSetting ? [setting] : []), JSON.stringify([...pending]), a.email, id]),
     env.DB.prepare(`INSERT INTO audit_log (actor, action, entity, entity_id) VALUES (?, 'suggest_moods', ?, ?)`).bind(a.email, kind, String(id)),
   ])
   return json({ ok: true, moods, mood_note: note })

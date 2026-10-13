@@ -232,6 +232,7 @@ export async function overpass(lat: number, lng: number): Promise<OsmEl[]> {
 nwr${a(20000)}[amenity=bus_station][name]; out center tags 8;
 nwr${a(3000)}[tourism~"^(hostel|guest_house|hotel|motel|apartment)$"][name]; out center tags 25;
 nwr${a(15000)}[tourism=hostel][name]; out center tags 10;
+nwr${a(15000)}[name~"YMCA|YWCA|Youth Hostel|YHAI|Dharamshala|Dharmashala|Sarai",i][~"^(tourism|amenity|building)$"~"."]; out center tags 10;
 nwr${a(1500)}[amenity~"^(restaurant|cafe|fast_food)$"][name]; out center tags 25;
 nwr${a(10000)}[amenity=place_of_worship][religion~"^(hindu|jain|sikh|buddhist)$"][name]; out center tags 25;
 nwr${a(12000)}[tourism~"^(attraction|viewpoint)$"][name]; out center tags 20;
@@ -278,9 +279,11 @@ export function suggestions(els: OsmEl[], origin: [number, number], selfName: st
 
   const bus = nearest(uniq(withD.filter((e) => t(e).amenity === 'bus_station')), 1)
   const stayType: Record<string, string> = { hostel: 'hostel', guest_house: 'homestay', apartment: 'homestay', hotel: 'hotel', motel: 'budget_hotel' }
-  // Budget travellers first: up to 3 hostels (within 15 km), then the nearest others (within 3 km).
-  const all = uniq(withD.filter((e) => stayType[t(e).tourism ?? '']))
-  const cheap = nearest(all.filter((e) => t(e).tourism === 'hostel'), 3)
+  // Budget travellers first: up to 3 hostels, YMCA/YWCA, youth hostels or dharmashalas (within 15 km), then the nearest others (within 3 km).
+  const nonProfit = /\b(YMCA|YWCA|Youth Hostel|YHAI|Dharamshala|Dharmashala|Sarai)\b/i
+  const typeOf = (e: OsmEl & { n: string }) => /dhara?m|sarai/i.test(e.n) ? 'dharmashala' : nonProfit.test(e.n) ? 'hostel' : stayType[t(e).tourism ?? '']
+  const all = uniq(withD.filter((e) => typeOf(e)))
+  const cheap = nearest(all.filter((e) => t(e).tourism === 'hostel' || nonProfit.test(e.n)), 3)
   const stays = [...cheap, ...nearest(all.filter((e) => !cheap.includes(e) && e.d <= 3), 6 - cheap.length)]
   const eats = nearest(uniq(withD.filter((e) => /^(restaurant|cafe|fast_food)$/.test(t(e).amenity ?? ''))), 6)
   const self = selfName.toLowerCase()
@@ -290,7 +293,7 @@ export function suggestions(els: OsmEl[], origin: [number, number], selfName: st
 
   return {
     transport: bus.map((e) => ({ type: 'bus' as const, name: e.n, code: null, distance_km: e.d })),
-    stays: stays.map((e) => ({ name: e.n, type: stayType[t(e).tourism!], distance_km: e.d, phone: phoneOf(t(e)), booking_url: webOf(t(e)) })),
+    stays: stays.map((e) => ({ name: e.n, type: typeOf(e), distance_km: e.d, phone: phoneOf(t(e)), booking_url: webOf(t(e)) })),
     eateries: eats.map((e) => ({ name: e.n, pure_veg: t(e)['diet:vegetarian'] === 'only' ? 1 : 0, distance_km: e.d, phone: phoneOf(t(e)) })),
     nearby: near.map((e) => ({
       name: e.n,

@@ -14,7 +14,7 @@ const ACCESS: [string, string][] = [['drive_up', 'Drive up to the spot'], ['shor
 const CONTACT_TYPES = ['phone', 'whatsapp', 'website', 'email', 'booking', 'instagram']
 const TRANSPORT: [string, string][] = [['rail', 'Railway station'], ['bus', 'Bus stand'], ['air', 'Airport'], ['local', 'Local transport']]
 const STAY_TYPES: [string, string][] = [['hostel', 'Hostel'], ['dorm', 'Dormitory'], ['homestay', 'Homestay / guest house'], ['budget_hotel', 'Budget hotel'],
-  ['hotel', 'Hotel'], ['resort', 'Resort'], ['dharmashala', 'Dharmashala / choultry']]
+  ['hotel', 'Hotel'], ['resort', 'Resort'], ['dharmashala', 'Dharmashala / choultry'], ['govt', 'Government-run stay']]
 const NEARBY_KINDS: [string, string][] = [['temple', 'Temple'], ['attraction', 'Attraction'], ['viewpoint', 'Viewpoint'], ['waterfall', 'Waterfall'],
   ['peak', 'Peak'], ['beach', 'Beach'], ['other', 'Other']]
 const SOURCE_TYPES: [string, string][] = [['reel', 'Reel'], ['video', 'Video'], ['article', 'Article / blog'], ['official', 'Official site'], ['other', 'Other']]
@@ -284,7 +284,7 @@ export default function PlaceForm({ me, lookups }: { me: Me; lookups: Lookups })
           <textarea className={area} aria-label="How to reach" value={d.place.how_to_reach ?? ''} onChange={(e) => setP('how_to_reach', e.target.value)} />
         </Section>
 
-        <Section n={7} title="Stay options" optional filled={d.stays.length > 0}>
+        <Section n={7} title="Stay options" optional filled={d.stays.length > 0} aside={<AiBadge field="stays" />}>
           <p className="m-0 text-sm text-muted">Users see: “Listed, not endorsed. Prices may vary at the time of your arrival.” Partner listings show a “Partner” label and are shown first.</p>
           {d.stays.map((s, i) => (
             <RowCard key={i} onRemove={() => removeRow('stays', i)}>

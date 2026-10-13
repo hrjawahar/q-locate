@@ -240,7 +240,7 @@ async function gather(env: Env, wikidataId: string, kind: Kind, wantAi: boolean)
   }
   if (ai) {
     const got = [ai.summary && 'summary', ai.highlights && `${ai.highlights.length} highlights`, ai.how_to_reach && 'how to reach', ai.nearby?.length && 'nearby notes',
-      ai.nearby_new?.length && `${ai.nearby_new.length} nearby places`, ai.practical && 'practical details', ai.categories?.length && `categories (${ai.categories.join(', ')})`, ai.refs?.length && `${ai.refs.length} web pages to check`].filter(Boolean)
+      ai.nearby_new?.length && `${ai.nearby_new.length} nearby places`, ai.stays_new?.length && `${ai.stays_new.length} budget stays`, ai.practical && 'practical details', ai.categories?.length && `categories (${ai.categories.join(', ')})`, ai.refs?.length && `${ai.refs.length} web pages to check`].filter(Boolean)
     notes.push(got.length ? `AI: ${got.join(', ')}` : 'AI found too little in the sources')
   }
   if (!wiki) notes.push('No English Wikipedia article')
@@ -262,7 +262,15 @@ function childStatements(env: Env, placeId: number, g: Gathered, only: { transpo
   const s: D1PreparedStatement[] = []
   const P = (sql: string, ...v: unknown[]) => s.push(env.DB.prepare(sql).bind(...v))
   if (g.sug && only.transport) g.sug.transport.forEach((t, i) => P('INSERT INTO place_transport (place_id, type, name, code, distance_km, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.type, t.name, t.code, t.distance_km, i))
-  if (g.sug && only.stays) g.sug.stays.forEach((t, i) => P('INSERT INTO place_stays (place_id, name, type, distance_km, phone, booking_url, sort) VALUES (?, ?, ?, ?, ?, ?, ?)', placeId, t.name, t.type, t.distance_km, t.phone, t.booking_url, i))
+  if (only.stays) {
+    // Budget stays from the AI's research first (hostels, government-run stays), then map results, without duplicates.
+    const ai = g.ai?.stays_new ?? []
+    ai.forEach((t, i) => P('INSERT INTO place_stays (place_id, name, type, distance_km, price_from, price_checked_on, booking_url, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      placeId, t.name, t.type, t.distance_km, t.price_from, t.price_from ? new Date().toISOString().slice(0, 10) : null, t.url, i))
+    const seen = new Set(ai.map((t) => t.name.toLowerCase()))
+    ;(g.sug?.stays ?? []).filter((t) => !seen.has(t.name.toLowerCase())).slice(0, Math.max(0, 8 - ai.length)).forEach((t, i) =>
+      P('INSERT INTO place_stays (place_id, name, type, distance_km, phone, booking_url, sort) VALUES (?, ?, ?, ?, ?, ?, ?)', placeId, t.name, t.type, t.distance_km, t.phone, t.booking_url, 20 + i))
+  }
   if (g.sug && only.eateries) g.sug.eateries.forEach((t, i) => P('INSERT INTO place_eateries (place_id, name, pure_veg, distance_km, phone, sort) VALUES (?, ?, ?, ?, ?, ?)', placeId, t.name, t.pure_veg, t.distance_km, t.phone, i))
   // Well-known sights from the AI's research go first (they're what visitors ask about), then map results, without duplicates.
   const mapNames = new Set((g.sug?.nearby ?? []).map((n) => n.name.toLowerCase()))
@@ -312,6 +320,7 @@ function aiFields(g: Gathered) {
   if (g.ai?.local_names?.length) f.push('names')
   if (g.ai?.practical) f.push('practical')
   if (g.ai?.nearby_new?.length) f.push('nearby')
+  if (g.ai?.stays_new?.length) f.push('stays')
   if (g.ai?.summary) f.push('summary')
   if (g.ai?.highlights) f.push('highlights')
   if (g.ai?.how_to_reach) f.push('how_to_reach')
@@ -446,6 +455,18 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
     add.forEach((t, i) => extraNearby.push(env.DB.prepare('INSERT INTO place_nearby (place_id, name, kind, distance_km, what_to_expect, sort) VALUES (?, ?, ?, ?, ?, ?)').bind(id, t.name, t.kind, t.distance_km, t.what_to_expect, i - 50)))
     if (add.length) pending.add('nearby')
   }
+  // Budget stays the AI found: added to an empty list (above), or to an existing one if not already listed.
+  const extraStays: D1PreparedStatement[] = []
+  if (g.ai?.stays_new?.length) {
+    if (empty[1]) pending.add('stays')
+    else {
+      const have = new Set(((await env.DB.prepare('SELECT lower(name) AS n FROM place_stays WHERE place_id = ?').bind(id).all<{ n: string }>()).results).map((r) => r.n))
+      const add = g.ai.stays_new.filter((t) => !have.has(t.name.toLowerCase()))
+      add.forEach((t, i) => extraStays.push(env.DB.prepare('INSERT INTO place_stays (place_id, name, type, distance_km, price_from, price_checked_on, booking_url, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, t.name, t.type, t.distance_km, t.price_from, t.price_from ? new Date().toISOString().slice(0, 10) : null, t.url, i - 50)))
+      if (add.length) pending.add('stays')
+    }
+  }
   if (!p.cover_photo && g.photo) {
     const key = await storePhoto(env, g.photo, String(p.slug)).catch(() => null)
     if (key) { set.cover_photo = key; set.cover_credit = g.photo.credit }
@@ -457,6 +478,7 @@ async function fillExisting(env: Env, id: number, wikidataId: string, actor: str
     env.DB.prepare(`UPDATE places SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ?, updated_at = datetime('now') WHERE id = ?`).bind(...cols.map((c) => set[c]), actor, id),
     ...nearbyNotes,
     ...extraNearby,
+    ...extraStays,
     ...aiCategories(env, id, p.kind as Kind, g),
     ...(p.kind === 'spiritual' && g.wd.deity ? [env.DB.prepare("INSERT INTO temple_details (place_id, main_deity) VALUES (?, ?) ON CONFLICT(place_id) DO UPDATE SET main_deity = COALESCE(NULLIF(temple_details.main_deity, ''), excluded.main_deity)").bind(id, g.wd.deity)] : []),
     ...childStatements(env, id, g, { transport: empty[0], stays: empty[1], eateries: empty[2], nearby: empty[3], sources: false, website: empty[5] }),

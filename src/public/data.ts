@@ -73,7 +73,7 @@ export const unsavePlace = (slug: string) => del(`saved:${slug}`)
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export const ACCESS: Record<string, string> = { drive_up: 'Drive up to the spot', short_walk: 'Short walk', steps_climb: 'Steps / steep climb', trek: 'Trek / long hike' }
 export const VISIT: Record<string, string> = { few_hours: 'A few hours', '1_day': '1 day', '2_3_days': '2–3 days', week_plus: 'A week or more' }
-export const STAY: Record<string, string> = { hostel: 'Hostel', dorm: 'Dormitory', homestay: 'Homestay', budget_hotel: 'Budget hotel', hotel: 'Hotel', resort: 'Resort', dharmashala: 'Dharmashala' }
+export const STAY: Record<string, string> = { hostel: 'Hostel', dorm: 'Dormitory', homestay: 'Homestay', budget_hotel: 'Budget hotel', hotel: 'Hotel', resort: 'Resort', dharmashala: 'Dharmashala', govt: 'Government-run' }
 export const AMENITY: Record<string, string> = { parking: 'Parking', food: 'Food nearby', restroom: 'Restrooms', wheelchair: 'Wheelchair access', atm: 'ATM nearby', drinking_water: 'Drinking water', cloakroom: 'Cloakroom / footwear stand', guide: 'Guides available' }
 export const km = (d: number | null | undefined) => (d == null ? '' : d < 1 ? `about ${Math.round(d * 1000 / 50) * 50} m` : `about ${d < 10 ? d.toFixed(1) : Math.round(d)} km`)
 export const where = (p: { city?: string; district_city?: string; state?: string; country?: string }) =>

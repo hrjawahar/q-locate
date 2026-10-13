@@ -148,7 +148,7 @@ Rules:
 const SCHEMA = `Return JSON:
 {"title": "common English title", "year": 0, "country": "production country, e.g. South Korea", "language": "original language, e.g. Korean",
  "subtitles": "\\"English subtitles\\" if the original language is not English, else \\"\\"",
- "genres": ["1-3 from: ${GENRES.join(', ')}"], "doc_topic": "for documentaries only: the subject, 1-3 words, e.g. Aviation, Wildlife, Space; else \\"\\"",
+ "genres": ["1-4 that fit from: ${GENRES.join(', ')}"], "doc_topic": "for documentaries only: the subject, 1-3 words, e.g. Aviation, Wildlife, Space; else \\"\\"",
  "runtime_min": 0, "pitch": "", "family_friendly": true | false | null,
  ${MOOD_PROMPT}}`
 
@@ -199,7 +199,7 @@ export async function fill(body: Record<string, unknown>, env: Env) {
       country: base.country ?? s('country', 80),
       language: base.language ?? s('language', 80),
       subtitles: s('subtitles', 80) ?? base.subtitles,
-      genres: Array.isArray(raw.genres) ? raw.genres.map(String).filter((g) => GENRES.includes(g)).slice(0, 3) : [],
+      genres: Array.isArray(raw.genres) ? raw.genres.map(String).filter((g) => GENRES.includes(g)).slice(0, 4) : [],
       doc_topic: s('doc_topic', 80),
       runtime_min: base.runtime_min ?? (num(raw.runtime_min) || null),
       pitch: s('pitch', 220),

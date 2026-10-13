@@ -146,7 +146,7 @@ Rules:
 const SCHEMA = `Return JSON:
 {"title": "common English title", "author": "author name(s)", "year": 0 (first published),
  "language": "\\"English\\" if written in English, else \\"English (translated from X)\\"", "fiction": true | false,
- "genres": ["1-3 from: ${GENRES.join(', ')}"], "topic": "for non-fiction only: the subject in 1-3 words, e.g. Habits, Investing, Mughal history; else \\"\\"",
+ "genres": ["1-4 that fit, most specific first, from: ${GENRES.join(', ')}"], "topic": "for non-fiction only: the subject in 1-3 words, e.g. Habits, Investing, Mughal history; else \\"\\"",
  "pages": 0 (typical English edition, approximate), "pitch": "",
  ${MOOD_PROMPT}}`
 
@@ -200,7 +200,7 @@ export async function fill(body: Record<string, unknown>, env: Env) {
       year: base.year ?? num(raw.year),
       language: base.language ?? s('language', 80),
       fiction,
-      genres: Array.isArray(raw.genres) ? raw.genres.map(String).filter((g) => GENRES.includes(g)).slice(0, 3) : [],
+      genres: Array.isArray(raw.genres) ? raw.genres.map(String).filter((g) => GENRES.includes(g)).slice(0, 4) : [],
       topic: fiction ? null : s('topic', 80),
       pages: base.pages ?? (num(raw.pages) || null),
       pitch: s('pitch', 220),

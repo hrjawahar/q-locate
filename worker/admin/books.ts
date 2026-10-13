@@ -87,7 +87,6 @@ export async function setStatus(id: number, body: Record<string, unknown>, env: 
   if (!m) return json({ error: 'not_found' }, { status: 404 })
   if (status === 'published') {
     const missing = [!m.author && 'author', !parseJson<string[]>(m.genres, []).length && 'category', !m.pitch && 'why read'].filter(Boolean)
-    if (!(await env.DB.prepare('SELECT count(*) AS n FROM book_recs WHERE book_id = ?').bind(id).first<number>('n'))) missing.push('a reviewer credit')
     if (missing.length) return json({ error: `Add ${missing.join(', ')} before publishing` }, { status: 400 })
     if (parseJson<string[]>(m.ai_pending, []).length) return json({ error: 'Check the AI draft (tick “I’ve checked it”) before publishing' }, { status: 400 })
   }

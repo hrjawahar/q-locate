@@ -67,7 +67,7 @@ export default function Books() {
         <Link to="/" aria-label="Back to home" className="w-11 h-11 -ml-2 grid place-items-center rounded-full text-ink no-underline text-2xl">‹</Link>
         <div>
           <h1 className="m-0 font-display text-3xl font-bold tracking-tight">Book Picks</h1>
-          <p className="m-0 text-sm text-muted">Books reviewers loved — find your next read</p>
+          <p className="m-0 text-sm text-muted">Books worth reading — find your next one</p>
           <p className="m-0 mt-1 text-xs font-semibold text-forest">English only: written in English, or English translations</p>
         </div>
       </header>
@@ -148,7 +148,7 @@ export default function Books() {
           </ul>
         </section>
       )}
-      <p className="m-0 px-5 py-6 text-xs text-muted leading-relaxed">Picks come from reviewers' public reels, credited above; Q-Locate isn't affiliated with them, the authors or publishers. Details are drafted with help from Wikidata and AI and checked by Q-Locate.</p>
+      <p className="m-0 px-5 py-6 text-xs text-muted leading-relaxed">Picks are Q-Locate's own or from reviewers' public reels, credited where they are; Q-Locate isn't affiliated with the reviewers, authors or publishers. Details are drafted with help from Wikidata and AI and checked by Q-Locate.</p>
     </main>
   )
 }

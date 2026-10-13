@@ -70,7 +70,7 @@ export default function Movies() {
         <Link to="/" aria-label="Back to home" className="w-11 h-11 -ml-2 grid place-items-center rounded-full text-ink no-underline text-2xl">‹</Link>
         <div>
           <h1 className="m-0 font-display text-3xl font-bold tracking-tight">Movie Picks</h1>
-          <p className="m-0 text-sm text-muted">English movies reviewers loved — find your next watch</p>
+          <p className="m-0 text-sm text-muted">English movies worth watching — find your next one</p>
           <p className="m-0 mt-1 text-xs font-semibold text-forest">English only: films in English, or world cinema with English subtitles</p>
         </div>
       </header>
@@ -157,7 +157,7 @@ export default function Movies() {
           </ul>
         </section>
       )}
-      <p className="m-0 px-5 py-6 text-xs text-muted leading-relaxed">Picks come from reviewers' public reels, credited above; Q-Locate isn't affiliated with them or the films. Details are drafted with help from Wikidata and AI and checked by Q-Locate. Check the age rating and where it's streaming before you watch.</p>
+      <p className="m-0 px-5 py-6 text-xs text-muted leading-relaxed">Picks are Q-Locate's own or from reviewers' public reels, credited where they are; Q-Locate isn't affiliated with the reviewers or the films. Details are drafted with help from Wikidata and AI and checked by Q-Locate. Check the age rating and where it's streaming before you watch.</p>
     </main>
   )
 }

@@ -38,7 +38,7 @@ export function BooksList({ me }: { me: Me }) {
     setBusy('Looking it up and drafting with AI… (up to a minute)'); setMsg('')
     try {
       const r = await addOne(form.title.trim(), form.author.trim(), { handle: form.handle, url: form.url, note: form.note })
-      if (r.existed) { setMsg('Already in Book Picks — this reviewer was added to it.'); load() } else nav(`/admin/books/${r.id}`)
+      if (r.existed) { setMsg(form.handle || form.url ? 'Already in Book Picks — this reviewer was added to it.' : 'Already in Book Picks.'); load() } else nav(`/admin/books/${r.id}`)
       setForm({ title: '', author: '', handle: '', url: '', note: '' })
     } catch (e) { setMsg((e as Error).message) }
     setBusy('')
@@ -64,8 +64,8 @@ export function BooksList({ me }: { me: Me }) {
         <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
           <input className={`${inp} sm:col-span-3`} placeholder="Book title *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <input className={`${inp} sm:col-span-3`} placeholder="Author (helps find the right book)" value={form.author} onChange={(e) => setForm({ ...form, author: e.target.value })} />
-          <input className={`${inp} sm:col-span-2`} placeholder="Reviewer @handle" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} />
-          <input className={`${inp} sm:col-span-4`} placeholder="Reel link" type="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+          <input className={`${inp} sm:col-span-2`} placeholder="Reviewer @handle (optional)" value={form.handle} onChange={(e) => setForm({ ...form, handle: e.target.value })} />
+          <input className={`${inp} sm:col-span-4`} placeholder="Reel or review link (optional)" type="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
           <input className={`${inp} sm:col-span-6`} placeholder="What the reviewer liked (optional, helps the AI)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
         </div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -200,11 +200,11 @@ export function BookForm({ me }: { me: Me }) {
       </fieldset>
 
       <div className="flex flex-col gap-2">
-        <h2 className="m-0 text-lg font-semibold">Recommended by *</h2>
+        <h2 className="m-0 text-lg font-semibold">Recommended by <span className="font-normal text-sm text-muted">— optional. Credit the reviewer or reel when the pick came from one; leave empty for Q-Locate’s own picks.</span></h2>
         {recs.map((r, i) => (
           <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-3 rounded-xl bg-stone-50">
             <input className={`${inp} sm:col-span-3`} placeholder="@handle" value={r.handle ?? ''} onChange={(e) => setRecs(recs.map((x, j) => j === i ? { ...x, handle: e.target.value } : x))} />
-            <input className={`${inp} sm:col-span-8`} placeholder="Reel link" value={r.url ?? ''} onChange={(e) => setRecs(recs.map((x, j) => j === i ? { ...x, url: e.target.value } : x))} />
+            <input className={`${inp} sm:col-span-8`} placeholder="Reel or review link" value={r.url ?? ''} onChange={(e) => setRecs(recs.map((x, j) => j === i ? { ...x, url: e.target.value } : x))} />
             <button className={`${btn} sm:col-span-1 px-0`} aria-label="Remove" onClick={() => setRecs(recs.filter((_, j) => j !== i))}>✕</button>
           </div>
         ))}

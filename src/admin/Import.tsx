@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, Me } from './api'
 
-interface Preset { id: string; label: string; kind: 'vacation' | 'spiritual'; mode: 'type' | 'names'; scope?: 'india' | 'intl'; category: string; circuit?: string; count?: number }
+interface Preset { id: string; label: string; kind: 'vacation' | 'spiritual'; mode: 'type' | 'names' | 'wikilist'; scope?: 'india' | 'intl'; category: string; circuit?: string; count?: number }
 interface Check { ai: boolean; model: string; webSearch: boolean; geonames: string; geonamesUser: string; smart?: string }
 interface Item { id: string; label: string; description: string; exists?: number | null; existsStatus?: string | null; queued?: boolean; position?: number; query?: string; alternatives?: { id: string; label: string; description: string }[] }
 interface Status { counts: Record<string, number>; batch?: Record<string, number>; recent: { id: number; wikidata_id: string; label: string; status: string; error: string | null; place_id: number | null }[]; ai: boolean }
@@ -19,6 +19,7 @@ export default function Import({ me }: { me: Me }) {
   const [customKind, setCustomKind] = useState<'vacation' | 'spiritual'>(me.scope === 'spiritual' ? 'spiritual' : 'vacation')
   const [customScope, setCustomScope] = useState<'india' | 'intl'>('india')
   const [names, setNames] = useState('')
+  const [wikiLink, setWikiLink] = useState('')
   const [notable, setNotable] = useState(true)
   const [items, setItems] = useState<Item[] | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -39,7 +40,8 @@ export default function Import({ me }: { me: Me }) {
   }, [me.scope])
 
   const preset = presets.find((p) => p.id === presetId)
-  const mode: 'preset' | 'type' | 'names' = presetId === '__type' ? 'type' : presetId === '__names' ? 'names' : 'preset'
+  const mode: 'preset' | 'type' | 'names' | 'wiki' = presetId === '__type' ? 'type' : presetId === '__names' ? 'names' : presetId === '__wiki' ? 'wiki' : 'preset'
+  const fixedList = preset?.mode === 'wikilist' || preset?.mode === 'names'
   const kind = preset ? preset.kind : customKind
   const intl = preset ? preset.scope === 'intl' : customScope === 'intl'
 
@@ -50,6 +52,7 @@ export default function Import({ me }: { me: Me }) {
       if (mode === 'preset') body.preset = presetId
       if (mode === 'type') { body.type_label = customType; body.scope = customScope }
       if (mode === 'names') body.names = names.split('\n')
+      if (mode === 'wiki') { body.wiki_list = wikiLink; body.kind = customKind }
       const d = await api<{ items: Item[]; type?: { id: string; label: string; description: string }; country?: { label: string } | null }>('/import/preview', { method: 'POST', json: body })
       setItems(d.items)
       setPicked(new Set(d.items.filter((i) => i.id && !i.exists && !i.queued).map((i) => i.id)))
@@ -140,25 +143,31 @@ export default function Import({ me }: { me: Me }) {
             <option value="">Choose…</option>
             <optgroup label="Explore — India">{presets.filter((p) => p.kind === 'vacation' && p.scope === 'india').map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</optgroup>
             <optgroup label="Explore — International">{presets.filter((p) => p.kind === 'vacation' && p.scope === 'intl').map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</optgroup>
+            <optgroup label="Darshan — by state (ancient temple lists)">{presets.filter((p) => p.mode === 'wikilist').map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</optgroup>
             <optgroup label="Darshan — India">{presets.filter((p) => p.kind === 'spiritual' && p.mode === 'type' && p.scope === 'india').map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</optgroup>
             <optgroup label="Darshan — International">{presets.filter((p) => p.kind === 'spiritual' && p.scope === 'intl').map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</optgroup>
             <optgroup label="Darshan — Circuits">{presets.filter((p) => p.mode === 'names').map((p) => <option key={p.id} value={p.id}>{p.label} ({p.count})</option>)}</optgroup>
-            <optgroup label="Other"><option value="__type">Any kind of place (type it)</option><option value="__names">A list of names (paste)</option></optgroup>
+            <optgroup label="Other"><option value="__type">Any kind of place (type it)</option><option value="__names">A list of names (paste, e.g. from an HR&amp;CE list)</option><option value="__wiki">From a Wikipedia list page (paste link)</option></optgroup>
           </select>
         </label>
 
-        {(mode === 'type' || mode === 'names') && presetId && (
+        {(mode === 'type' || mode === 'names' || mode === 'wiki') && presetId && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-sm font-semibold">Tab<select className={inp} value={customKind} onChange={(e) => setCustomKind(e.target.value as 'vacation' | 'spiritual')} disabled={me.scope !== 'all'}><option value="vacation">Explore</option><option value="spiritual">Darshan</option></select></label>
             {mode === 'type' && <label className="flex flex-col gap-1 text-sm font-semibold">India or abroad<select className={inp} value={customScope} onChange={(e) => setCustomScope(e.target.value as 'india' | 'intl')}><option value="india">India</option><option value="intl">International</option></select></label>}
           </div>
         )}
         {mode === 'type' && <label className="flex flex-col gap-1 text-sm font-semibold">Kind of place<input className={inp} placeholder="e.g. Divya Desam, Shakti Peetha, cave, dam, tea estate" value={customType} onChange={(e) => setCustomType(e.target.value)} /></label>}
-        {mode === 'names' && <label className="flex flex-col gap-1 text-sm font-semibold">Names, one per line (up to 40)<textarea className="w-full rounded-lg border border-stone-300 p-3 min-h-32" value={names} onChange={(e) => setNames(e.target.value)} /></label>}
-        {mode !== 'names' && presetId && (intl
+        {mode === 'names' && <label className="flex flex-col gap-1 text-sm font-semibold">Names, one per line (up to 60) — add the district after a | for a surer match
+          <textarea className="w-full rounded-lg border border-stone-300 p-3 min-h-32 font-normal" placeholder={'Arulmigu Kapaleeswarar Temple | Chennai\nArulmigu Thyagarajaswamy Temple | Tiruvarur'} value={names} onChange={(e) => setNames(e.target.value)} />
+          <span className="font-normal text-muted">Choose a state below so only places in that state (and district) are matched.</span></label>}
+        {mode === 'wiki' && <label className="flex flex-col gap-1 text-sm font-semibold">Wikipedia list page<input className={inp} placeholder="https://en.wikipedia.org/wiki/Paadal_Petra_Sthalam" value={wikiLink} onChange={(e) => setWikiLink(e.target.value)} />
+          <span className="font-normal text-muted">Every place linked from the page is checked; for Darshan only temples and other places of worship are kept.</span></label>}
+        {mode === 'names' && <label className="flex flex-col gap-1 text-sm font-semibold">State<input className={inp} list="states" placeholder="e.g. Tamil Nadu" value={region} onChange={(e) => setRegion(e.target.value)} /></label>}
+        {mode !== 'names' && presetId && !fixedList && (intl
           ? <label className="flex flex-col gap-1 text-sm font-semibold">Country (leave empty for all countries outside India)<input className={inp} placeholder="e.g. Nepal, Sri Lanka, Thailand" value={country} onChange={(e) => setCountry(e.target.value)} /></label>
           : <label className="flex flex-col gap-1 text-sm font-semibold">State (optional)<input className={inp} list="states" placeholder="All of India" value={region} onChange={(e) => setRegion(e.target.value)} /></label>)}
-        {mode !== 'names' && presetId && <label className="flex items-center gap-2 text-sm min-h-11"><input type="checkbox" className="w-5 h-5" checked={notable} onChange={(e) => setNotable(e.target.checked)} />Only well-documented places (with an English Wikipedia article) — recommended</label>}
+        {mode !== 'names' && mode !== 'wiki' && presetId && !fixedList && <label className="flex items-center gap-2 text-sm min-h-11"><input type="checkbox" className="w-5 h-5" checked={notable} onChange={(e) => setNotable(e.target.checked)} />Only well-documented places (with an English Wikipedia article) — recommended</label>}
         {presetId && <button className={`${btn} bg-forest text-white self-start`} disabled={busy} onClick={runPreview}>Find places</button>}
         {info && <p className="m-0 text-sm">{info}</p>}
         {err && <p className="m-0 text-sm text-red-700">{err}</p>}

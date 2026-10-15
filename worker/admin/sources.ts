@@ -52,21 +52,77 @@ export async function resolveType(label: string): Promise<WdHit | null> {
 export interface ListItem { id: string; label: string; description: string }
 export async function listByType(opts: { typeId: string; countryId: string | null; excludeIndia?: boolean; region?: string; notableOnly: boolean }): Promise<ListItem[]> {
   const where = [
-    `?item wdt:P31 wd:${qid(opts.typeId)} .`,
+    // With a state chosen the list is small, so include sub-kinds too (e.g. "Shiva temple" under "Hindu temple").
+    opts.region ? `?item wdt:P31/wdt:P279* wd:${qid(opts.typeId)} .` : `?item wdt:P31 wd:${qid(opts.typeId)} .`,
     opts.countryId ? `?item wdt:P17 wd:${qid(opts.countryId)} .` : '',
     opts.excludeIndia ? 'FILTER NOT EXISTS { ?item wdt:P17 wd:Q668 }' : '',
     opts.region ? `?item wdt:P131+ ?rg . ?rg rdfs:label ${sparqlStr(opts.region)}@en .` : '',
     opts.notableOnly ? '?art schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> .' : '',
   ].join('\n')
-  const rows = await sparql(`SELECT DISTINCT ?item ?itemLabel ?itemDescription WHERE {
+  // Best-known first (by number of Wikipedia language editions), so a capped list isn't dominated by one well-catalogued region.
+  const rows = await sparql(`SELECT DISTINCT ?item ?itemLabel ?itemDescription ?links WHERE {
 ${where}
+OPTIONAL { ?item wikibase:sitelinks ?links }
 SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-} LIMIT 1000`)
+} ORDER BY DESC(?links) LIMIT 1000`)
   return rows.map((r) => ({
     id: (r.item?.value ?? '').split('/').pop() ?? '',
     label: r.itemLabel?.value ?? '',
     description: r.itemDescription?.value ?? '',
   })).filter((r) => /^Q\d+$/.test(r.id) && r.label && !/^Q\d+$/.test(r.label))
+}
+
+/** Places linked from a Wikipedia list article (e.g. "Paadal Petra Sthalam", "Divya Desam"), kept to temples /
+ *  places of worship (or any place when kinds is empty), optionally inside a state. Founding year shown where Wikidata has it. */
+export async function listFromWikipedia(titleOrUrl: string, opts: { region?: string; placesOfWorship: boolean }): Promise<(ListItem & { inception?: number | null })[]> {
+  const title = decodeURIComponent((titleOrUrl.match(/\/wiki\/([^?#]+)/)?.[1] ?? titleOrUrl).replace(/_/g, ' ')).trim()
+  if (!title) return []
+  const ids = new Set<string>()
+  let cont: Record<string, string> = {}
+  for (let page = 0; page < 12; page++) {
+    const u = new URL('https://en.wikipedia.org/w/api.php')
+    u.search = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', redirects: '1', titles: title, generator: 'links', gplnamespace: '0', gpllimit: 'max',
+      prop: 'pageprops', ppprop: 'wikibase_item', origin: '*', ...cont }).toString()
+    const d = await getJson<{ query?: { pages?: { pageprops?: { wikibase_item?: string } }[] }; continue?: Record<string, string> }>(u.toString())
+    for (const p of d.query?.pages ?? []) if (p.pageprops?.wikibase_item) ids.add(p.pageprops.wikibase_item)
+    if (!d.continue) break
+    cont = d.continue
+  }
+  if (!ids.size) return []
+  const out: (ListItem & { inception?: number | null })[] = []
+  const all = [...ids]
+  for (let i = 0; i < all.length; i += 300) {
+    const rows = await sparql(`SELECT DISTINCT ?item ?itemLabel ?itemDescription (MIN(YEAR(?inc)) AS ?year) (SAMPLE(?links) AS ?n) WHERE {
+VALUES ?item { ${all.slice(i, i + 300).map((x) => `wd:${qid(x)}`).join(' ')} }
+${opts.placesOfWorship ? '?item wdt:P31/wdt:P279* wd:Q1370598 .' : '?item wdt:P625 ?coord .'}
+${opts.region ? `?item wdt:P131+ ?rg . ?rg rdfs:label ${sparqlStr(opts.region)}@en .` : ''}
+OPTIONAL { ?item wdt:P571 ?inc } OPTIONAL { ?item wikibase:sitelinks ?links }
+SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+} GROUP BY ?item ?itemLabel ?itemDescription`, 40000)
+    for (const r of rows) {
+      const id = (r.item?.value ?? '').split('/').pop() ?? ''
+      const label = r.itemLabel?.value ?? ''
+      if (/^Q\d+$/.test(id) && label && !/^Q\d+$/.test(label)) out.push({ id, label, description: r.itemDescription?.value ?? '', inception: r.year?.value ? Number(r.year.value) : null })
+    }
+  }
+  return out
+}
+
+/** Find a named place inside a state (and district, if given): searches Wikidata and keeps the hit located there. */
+export async function findInRegion(name: string, region: string, district?: string): Promise<{ best: WdHit | null; others: WdHit[] }> {
+  const hits = await wdSearch(name, 7).catch(() => [] as WdHit[])
+  if (!hits.length) return { best: null, others: [] }
+  const rows = await sparql(`SELECT DISTINCT ?item ?d WHERE {
+VALUES ?item { ${hits.map((h) => `wd:${qid(h.id)}`).join(' ')} }
+?item wdt:P131+ ?rg . ?rg rdfs:label ${sparqlStr(region)}@en .
+OPTIONAL { ?item wdt:P131+ ?dd . ?dd rdfs:label ?d FILTER(lang(?d) = "en") }
+}`).catch(() => [])
+  const inRegion = new Map<string, string[]>()
+  for (const r of rows) { const id = (r.item?.value ?? '').split('/').pop()!; inRegion.set(id, [...(inRegion.get(id) ?? []), r.d?.value ?? '']) }
+  const want = district?.toLowerCase().replace(/\s+district$/, '').trim()
+  const ok = hits.filter((h) => inRegion.has(h.id))
+  const best = (want ? ok.find((h) => inRegion.get(h.id)!.some((x) => x.toLowerCase().includes(want))) : undefined) ?? ok[0] ?? null
+  return { best, others: hits.filter((h) => h !== best).slice(0, 4) }
 }
 
 export interface WdPlace {

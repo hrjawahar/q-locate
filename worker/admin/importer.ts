@@ -2,13 +2,14 @@ import { json, parseJson } from '../util'
 import type { AdminEnv, Admin } from './auth'
 import { gnWhere, gnNearby } from './geonames'
 import { missingScripts, SCRIPTS } from './scripts'
-import { wdPlace, wdSearch, resolveType, listByType, wikiExtract, commonsPhoto, download, overpass, suggestions, wdTransport, type WdPlace, type Suggestions, type Hub } from './sources'
+import { wdPlace, wdSearch, resolveType, listByType, listFromWikipedia, findInRegion, type WdHit, wikiExtract, commonsPhoto, download, overpass, suggestions, wdTransport, type WdPlace, type Suggestions, type Hub } from './sources'
 import { draftWithAi, type AiDraft } from './ai'
 
 type Kind = 'vacation' | 'spiritual'
 interface TypePreset { id: string; label: string; kind: Kind; mode: 'type'; typeLabel: string; category: string; scope: 'india' | 'intl' }
 interface NamesPreset { id: string; label: string; kind: Kind; mode: 'names'; circuit: string; category: string; names: string[] }
-type Preset = TypePreset | NamesPreset
+interface WikiPreset { id: string; label: string; kind: Kind; mode: 'wikilist'; page: string; region: string; category: string; circuit?: string }
+type Preset = TypePreset | NamesPreset | WikiPreset
 
 const T = (id: string, label: string, kind: Kind, typeLabel: string, category: string, scope: 'india' | 'intl' = 'india'): TypePreset =>
   ({ id, label, kind, mode: 'type', typeLabel, category, scope })
@@ -27,7 +28,12 @@ export const PRESETS: Preset[] = [
   T('intl-national-parks', 'National parks (abroad)', 'vacation', 'national park', 'wildlife', 'intl'),
   T('intl-beaches', 'Beaches (abroad)', 'vacation', 'beach', 'beach', 'intl'),
   T('intl-waterfalls', 'Waterfalls (abroad)', 'vacation', 'waterfall', 'waterfall', 'intl'),
-  T('hindu-temples', 'Hindu temples', 'spiritual', 'Hindu temple', 'temple'),
+  // Tamil Nadu, from Wikipedia's lists of ancient temples (all well over 100 years old), kept to places of worship in the state.
+  { id: 'tn-paadal-petra', label: 'Tamil Nadu — Paadal Petra Sthalams (Shiva temples sung in the Tevaram, 7th–9th c.)', kind: 'spiritual', mode: 'wikilist', page: 'Paadal Petra Sthalam', region: 'Tamil Nadu', category: 'temple', circuit: 'paadal-petra' },
+  { id: 'tn-divya-desam', label: 'Tamil Nadu — Divya Desams (Vishnu temples sung by the Alvars)', kind: 'spiritual', mode: 'wikilist', page: 'Divya Desam', region: 'Tamil Nadu', category: 'temple', circuit: 'divya-desam' },
+  { id: 'tn-asi', label: 'Tamil Nadu — monuments of national importance (ASI-protected)', kind: 'spiritual', mode: 'wikilist', page: 'List of Monuments of National Importance in Tamil Nadu', region: 'Tamil Nadu', category: 'temple' },
+  { id: 'tn-wiki', label: 'Tamil Nadu — all temples on Wikipedia’s list', kind: 'spiritual', mode: 'wikilist', page: 'List of Hindu temples in Tamil Nadu', region: 'Tamil Nadu', category: 'temple' },
+  T('hindu-temples', 'Hindu temples (choose a state below)', 'spiritual', 'Hindu temple', 'temple'),
   T('cave-temples', 'Cave temples', 'spiritual', 'cave temple', 'cave-temple'),
   T('jain-temples', 'Jain temples', 'spiritual', 'Jain temple', 'jain-temple'),
   T('gurdwaras', 'Gurdwaras', 'spiritual', 'gurdwara', 'gurdwara'),
@@ -53,7 +59,7 @@ export const PRESETS: Preset[] = [
     'Thillai Nataraja Temple, Chidambaram', 'Meenakshi Temple', 'Nellaiappar Temple', 'Kutralanathar Temple', 'Vadaranyeswarar Temple'] },
 ]
 
-export const listPresets = () => json({ presets: PRESETS.map(({ ...p }) => ({ ...p, names: undefined, count: p.mode === 'names' ? p.names.length : undefined })) })
+export const listPresets = () => json({ presets: PRESETS.map(({ ...p }) => ({ ...p, names: undefined, count: p.mode === 'names' ? p.names.length : undefined, page: undefined })) })
 
 interface PreviewItem { id: string; label: string; description: string; exists?: number | null; existsStatus?: string | null; queued?: boolean; position?: number; alternatives?: { id: string; label: string; description: string }[]; query?: string }
 
@@ -80,10 +86,28 @@ export async function preview(body: Record<string, unknown>, env: AdminEnv) {
   const countryName = typeof body.country === 'string' ? body.country.trim() : ''
   const notableOnly = body.notable_only !== false
 
+  // From a Wikipedia list article (preset or pasted link).
+  const wikiPage = preset?.mode === 'wikilist' ? preset.page : typeof body.wiki_list === 'string' ? body.wiki_list.trim() : ''
+  if (wikiPage) {
+    const reg = preset?.mode === 'wikilist' ? preset.region : region
+    const list = await listFromWikipedia(wikiPage, { region: reg || undefined, placesOfWorship: preset?.mode === 'wikilist' || (preset?.kind ?? body.kind) === 'spiritual' })
+    if (!list.length) return json({ error: `No ${reg ? `places in ${reg} ` : 'places '}found on the Wikipedia page “${wikiPage}”. Check the link, or try without a state.` }, { status: 404 })
+    const items = list.map((x) => ({ id: x.id, label: x.label, description: [x.description, x.inception ? `founded ${x.inception < 0 ? `${-x.inception} BCE` : x.inception}` : ''].filter(Boolean).join(' · ') }))
+    return json({ mode: 'wikilist', items: await markExisting(env, items) })
+  }
+
   if (preset?.mode === 'names' || Array.isArray(body.names)) {
-    const names = preset?.mode === 'names' ? preset.names : (body.names as unknown[]).map(String).map((s) => s.trim()).filter(Boolean).slice(0, 40)
+    // Pasted lines may be "Temple name | District"; with a state chosen, the match must be in that state (and district).
+    const lines = preset?.mode === 'names' ? preset.names : (body.names as unknown[]).map(String).map((s) => s.trim()).filter(Boolean).slice(0, 60)
     const items: PreviewItem[] = []
-    for (const [i, n] of names.entries()) {
+    for (const [i, line] of lines.entries()) {
+      const [n, district] = line.split(/\s*[|\t]\s*/)
+      if (region && !preset) {
+        const { best, others } = await findInRegion(n, region, district).catch(() => ({ best: null, others: [] as WdHit[] }))
+        items.push(best ? { ...best, alternatives: others, query: line }
+          : { id: '', label: n, description: `Not found on Wikidata in ${region}${district ? ` (${district})` : ''} — add it by hand`, query: line })
+        continue
+      }
       const hits = await wdSearch(n, 3).catch(() => [])
       items.push(hits[0]
         ? { ...hits[0], position: preset ? i + 1 : undefined, alternatives: hits.slice(1), query: n }
